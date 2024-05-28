@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 import copy
 import random
+import matplotlib.pyplot as plt
 
 
 from skimage import measure
@@ -30,12 +31,44 @@ __all__ = [
 
 DEBUG_IMG_FLAG = False
 VISUALIZE_POLYGON=False
-visual_iter = 200
+visual_iter = 100
+Target_coefficients = None
+Source_coefficients = None
+
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
-RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
-# RARE_CLASS_NAMES = [] # close rare balance for ablation
+# RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
+RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR THIS
 # RARE_CLASS_NAMES = [4, 6] # for synthia, bus is 4,  motor is 6
 
+def translated_obj_mask(obj_mask,image, dx=50,dy=50):
+    ''' dx control col, dy control row,dy > 0, move down, dx > 0, move right'''
+    # 获取mask的形状
+    rows, cols = obj_mask.shape
+    # 创建平移后的mask
+    translated_mask = torch.zeros_like(obj_mask, dtype=torch.bool)
+    translated_img = copy.deepcopy(image)
+    # 确定新的位置
+    x_start = max(dx, 0)
+    x_end = min(cols, cols + dx)
+    y_start = max(dy, 0)
+    y_end = min(rows, rows + dy)
+    
+    orig_x_start = max(-dx, 0)
+    orig_x_end = min(cols, cols - dx)
+    orig_y_start = max(-dy, 0)
+    orig_y_end = min(rows, rows - dy)
+    
+    translated_mask[y_start:y_end, x_start:x_end] = obj_mask[orig_y_start:orig_y_end, orig_x_start:orig_x_end]
+    for c in range(3):
+        translated_img[c, y_start:y_end, x_start:x_end] = image[c, orig_y_start:orig_y_end, orig_x_start:orig_x_end]
+    
+    # cv2.imwrite('before.png',(obj_mask*255).numpy())
+    # cv2.imwrite('after.png',(translated_mask*255).numpy())
+ 
+    # cv2.imwrite('before_img.png',(image).permute(1,2,0).numpy())
+    # cv2.imwrite('after_img.png',(translated_img).permute(1,2,0).numpy())
+
+    return translated_mask, translated_img
 
 def get_cityscapes_labels():
     return [
@@ -77,15 +110,37 @@ def remove_occlussion(base_instances, pasted_instances):
 
 def remove_ego_car_logo(pseudo_instance, template):
     ''' design for cityscapes, crop 1024*1024, remove pseudo label which is ego car head and logo'''
-    white_mask = template == 255
-    white_mask = (white_mask*1)[0, :,:]
-    pseudo_instance.pred_masks = pseudo_instance.pred_masks * (white_mask.cuda())
-
-    # assert pseudo_instance.pred_masks.shape[1] == 1024
-    # pseudo_instance.pred_masks[:,810:,:] = 0
-    # # remove ego car logo
-    # for img in images:
-    #     img[:, 810:, :] = 0
+    if len(pseudo_instance._fields) == 0:
+        return
+    white_mask = template >= 20
+    white_mask = (white_mask*1)[0, :, :]
+    pred_masks = pseudo_instance.pred_masks
+    if len(pred_masks) == 0:
+        return
+    ''' process every mask , if one mask is covered totally by template, remove it and its score and label'''
+    indices_to_remove = []
+    for i, mask in enumerate(pred_masks):
+        mask_area = mask.sum().item()
+        if mask_area == 0:
+            continue
+        ''' mask:1 is area of instance, white_mask 1 is not ego car log, 0 is logo, 
+        if mask is in white_mask, multipy makes it 0.'''
+        template_apply_mask = mask * white_mask.cuda()
+        # cv2.imwrite(str(i) + '_.png', template_apply_mask.cpu().numpy())
+        # rows, cols = np.where(mask.cpu().numpy() > 0 )
+        # center_row = 0.5*(rows.max() - rows.min()) + rows.min()
+        template_apply_mask_area = template_apply_mask.sum().item()
+        if (template_apply_mask_area/mask_area) < 0.2:
+            indices_to_remove.append(i)
+    new_pseudo_instance = Instances((pseudo_instance.image_size[0], pseudo_instance.image_size[1]))
+    for i in range(len(pseudo_instance)):
+        if i not in indices_to_remove:
+            if len(new_pseudo_instance._fields) == 0:
+                new_pseudo_instance = Instances.cat([pseudo_instance[i], pseudo_instance[i]])
+            else:
+                new_pseudo_instance = Instances.cat([new_pseudo_instance, pseudo_instance[i]])
+    del pseudo_instance
+    return new_pseudo_instance[1:]
 
 def break_source_target_match(data):
     ''' break source and target match'''
@@ -131,6 +186,7 @@ def visulize_color_instances(instances):
     return color_instances
 
 def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, folder_name, source_rare_class_samples):
+    global Target_coefficients
     gt_instance = one_data['source']['instances']
     gt_classes = gt_instance.gt_classes
     # gt_polygons = gt_syn.gt_masks
@@ -155,23 +211,94 @@ def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, fold
 
     gt_instance_select = Instances((hs, ws))
     THIS_FRAME_HAS_RARE_CLASSES = False
-    for i, obj_mask in enumerate(gt_masks):
-    # for i in range(gt_masks.shape[0]):
-        instance_size = (obj_mask*1).sum().item()
-        if instance_size < 3000:#  use all bring too much noise  
-            continue 
-        # obj_mask = gt_masks[i]
-        # h, w = obj_mask.shape
-        # if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-        #     print(gt_classes[i])
-        #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_' + str(i) + '_mask-x.jpg', obj_mask.numpy()*255)
-        # obj_mask=F.interpolate(obj_mask.view(1, 1, h, w),size=(hs, ws),mode='bilinear')
-        # obj_mask = obj_mask.view(hs, ws).bool()
-        # instances_mask = polygons_to_bitmask(poly, hs, ws) # mask for every polygon
+    center_row_list = []
+    height_list = []
+    for i, pred_mask in enumerate(pseudo_instances.pred_masks):
+        foreground_indices = pred_mask.nonzero(as_tuple=False)
+        if foreground_indices.size(0) == 0:
+            continue
+            # raise ValueError("The pred_mask contains no foreground pixels.")
+        # 计算中心坐标
+        center_row = foreground_indices.float().mean(dim=0)[0].item()
+        # print('center : ', foreground_indices.float().mean(dim=0))
+        # 计算前景高度
+        min_row = foreground_indices[:, 0].min().item()
+        max_row = foreground_indices[:, 0].max().item()
+        height = max_row - min_row + 1
+        center_row_list.append(center_row)
+        height_list.append(height)
 
+    if len(center_row_list) > 2:
+        # 示例数据：目标高度数组和最低点数组
+        height_list = np.array(height_list)
+        center_row_list = np.array(center_row_list)
+        # 使用NumPy的polyfit函数拟合二次多项式
+        Target_coefficients = np.polyfit(height_list, center_row_list, 1)
+        ########  to show ###########################
+        # # 创建一个多项式对象
+        # polynomial = np.poly1d(Target_coefficients)
+        # # 生成预测值
+        # heights_fit = np.linspace(min(height_list), max(height_list), 100)
+        # center_row_list = polynomial(heights_fit)
+        # # 打印拟合的多项式系数
+        # print(f"Fitted polynomial coefficients: {Target_coefficients}")
+        # # 可视化
+        # plt.figure(figsize=(10, 6))
+        # plt.scatter(heights_fit, center_row_list, color='red', label='Data points')
+        # plt.plot(heights_fit, center_row_list, color='blue', label='Fitted quadratic polynomial')
+        # plt.xlabel('Height')
+        # plt.ylabel('Lowest Point')
+        # plt.title('Quadratic Polynomial Fitting')
+        # plt.legend()
+        # plt.grid(True)
+        # # 保存图片
+        # plt.savefig('quadratic_polynomial_fitting.png')
+        ########  to show ###########################
+    else:
+        print('use last target_coefficients')
+
+    for i, obj_mask in enumerate(gt_masks):
+        instance_size = (obj_mask*1).sum().item()
+        if instance_size == 0:
+            continue 
+        # 计算前景高度
+        min_row = foreground_indices[:, 0].min().item()
+        max_row = foreground_indices[:, 0].max().item()
+        height = max_row - min_row + 1
+
+        # if Target_coefficients is not None:
+        #     foreground_indices = obj_mask.nonzero(as_tuple=False)
+        #     # 计算中心坐标
+        #     center_row = int(foreground_indices.float().mean(dim=0)[0].item())
+        #     # 创建一个多项式对象
+        #     polynomial = np.poly1d(Target_coefficients)
+        #     # 生成预测值
+        #     # heights_fit = np.linspace(min(height_list), max(height_list), 100)
+        #     center_row_fit = int(polynomial(height))
+        #     # x_shift = random.randint(-150, 150)
+        #     x_shift = 0
+        #     y_shift = center_row_fit - center_row
+        #     # print(center_row_fit, center_row, y_shift)
+        # else:
+        #     ''' shift obj_mask'''
+        #     x_shift = random.randint(-150, 150)
+        #     if height < 100: # TODO : CHANEG TO height
+        #         y_shift = random.randint(-100, -50)
+        #     else:
+        #         y_shift = random.randint(0, 100)
+        #     # x_shift = 0
+        #     # y_shift = 0
+        ''' shift obj_mask'''
+        x_shift = random.randint(-150, 150)
+        if height < 100:
+            y_shift = random.randint(-100, -50)
+        else:
+            y_shift = random.randint(0, 100)
+        # print('x_shift, y_shift :', x_shift, y_shift, ", height: ", height)
+        shift_obj_mask, shift_source_image = translated_obj_mask(obj_mask,source_img, dx=x_shift,dy=y_shift)        
         ins = Instances((hs, ws))
         ins.gt_classes = gt_classes[i].view(1)
-        ins.gt_masks = obj_mask.view(1, hs, ws)
+        ins.gt_masks = shift_obj_mask.view(1, hs, ws)
         ''' gather all big source instances'''
         if len(gt_instance_select._fields) == 0:
             gt_instance_select = Instances.cat([ins, ins]) # first one is redandence
@@ -181,9 +308,12 @@ def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, fold
         if i == 0:
             source_img = torch.from_numpy(cv2.GaussianBlur(source_img.permute(1,2,0).to(torch.uint8).numpy(), (5, 5),0)).permute(2,0,1)
         for c in range(3):
-            target_img[c,:][obj_mask] = source_img[c,:][obj_mask]
+            # target_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
+            target_img[c,:][shift_obj_mask] = shift_source_image[c,:][shift_obj_mask]
             if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-                instances_img[c,:][obj_mask] = source_img[c,:][obj_mask]
+                # instances_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
+                instances_img[c,:][shift_obj_mask] = shift_source_image[c,:][shift_obj_mask]
+
         # for rare class balance
         if gt_classes[i].item() in RARE_CLASS_NAMES:
             source_rare_class_samples.append({'img':source_img, 'instance':ins})
@@ -228,7 +358,6 @@ def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, fold
             cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_color_instance.jpg', color_instances)
             cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_source_gt_color_instance.jpg', gt_color_instances)
 
-
             # Image.fromarray(target_img_vis_cp).save(folder_name + file_id + '_' + str(local_iter) + '_s2t_mix---.jpg')
             # Image.fromarray(source_img_vis).save(folder_name + file_id + '_' + str(local_iter) + '_gt_img.jpg')
             city = one_data['source']['file_name'].split('/')[8]
@@ -268,12 +397,21 @@ def target_instance_paste_to_source_mix(one_data, pseudo_label, local_iter, fold
     for i, obj_mask in enumerate(pred_masks.cpu()):
     # for i in range(gt_masks.shape[0]):
         instance_size = (obj_mask).sum().item()
-        if instance_size < 3000:# TODO to use all
-            continue
+        # if instance_size < 3000:# TODO to use all
+        #     continue
+        
+        ''' shift obj_mask'''
+        x_shift = random.randint(0, 150)
+        if instance_size < 5000: # TODO : CHANEG TO height
+            y_shift = random.randint(-100, -50)
+        else:
+            y_shift = random.randint(0, 100)
+        shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
+
         obj_mask = obj_mask.bool()
         ins = Instances((hs, ws))
         ins.gt_classes = pred_classes[i].cpu().view(1)
-        ins.gt_masks = obj_mask.cpu().view(1, hs, ws)
+        ins.gt_masks = shift_obj_mask.cpu().view(1, hs, ws)
         ''' gather all big source instances'''
         if len(pred_instance_select._fields) == 0:
             pred_instance_select = Instances.cat([ins, ins]) # first one is redandence
@@ -281,9 +419,9 @@ def target_instance_paste_to_source_mix(one_data, pseudo_label, local_iter, fold
             pred_instance_select = Instances.cat([pred_instance_select, ins])
         ''' mix the image'''
         for c in range(3):
-            source_img[c,:][obj_mask] = target_img[c,:][obj_mask]
+            source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
             if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-                t_instances_img[c,:][obj_mask] = target_img[c,:][obj_mask]
+                t_instances_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
         # # for rare class balance
         # if pred_classes[i].item() in RARE_CLASS_NAMES:
         #     target_rare_class_samples.append({'img':source_img, 'instance':ins})
