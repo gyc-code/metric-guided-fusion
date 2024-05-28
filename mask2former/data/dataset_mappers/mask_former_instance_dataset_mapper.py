@@ -104,10 +104,11 @@ class MaskFormerInstanceDatasetMapper:
             
                 if data_key == "target":
                     template_mask = utils.read_image('template/cityscapes_ego_car_template.png', format=self.img_format)
-                    aug_template = T.AugInput(template_mask)
-                    aug_template, transforms = T.apply_transform_gens(self.tfm_gens, aug_template)
-                    template_mask = aug_template.image
-
+                    for index, t in enumerate(transforms):
+                        # print(t.__class__.__name__)
+                        if 'Color' in t.__class__.__name__:
+                            continue
+                        template_mask = t.apply_image(template_mask)
                     # Pad image here!
                     image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
                     template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
