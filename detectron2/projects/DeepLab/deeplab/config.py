@@ -10,7 +10,7 @@ def add_deeplab_config(cfg):
     # than `SINGLE_CATEGORY_MAX_AREA` part of the crop.
     cfg.INPUT.CROP.SINGLE_CATEGORY_MAX_AREA = 1.0
     # Used for `poly` learning rate schedule.
-    cfg.SOLVER.POLY_LR_POWER = 0.9
+    cfg.SOLVER.POLY_LR_POWER = 3# 0.9
     cfg.SOLVER.POLY_LR_CONSTANT_ENDING = 0.0
     # Loss type, choose from `cross_entropy`, `hard_pixel_mining`.
     cfg.MODEL.SEM_SEG_HEAD.LOSS_TYPE = "hard_pixel_mining"

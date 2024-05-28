@@ -52,6 +52,8 @@ class WarmupPolyLR(LRScheduler):
                 < self.constant_ending
             ):
                 return [base_lr * self.constant_ending for base_lr in self.base_lrs]
+        print([base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
+            for base_lr in self.base_lrs][0])
         return [
             base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
             for base_lr in self.base_lrs
