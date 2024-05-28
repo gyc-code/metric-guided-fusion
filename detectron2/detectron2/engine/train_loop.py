@@ -25,6 +25,8 @@ __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 TOTAL_LOSS = True
 
 VISUL = False
+ITERATION_TO_START_UDA = 5000
+MINI_BATCH_LOSS = True
 
 class HookBase:
     """
@@ -535,40 +537,31 @@ class AMPTrainer(SimpleTrainer):
         start = time.perf_counter()
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
-        if 'source' in data[0]:# cindy add 
+        self.local_iter += 1
+
+        if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             batch_size = len(data)
             # cindy: shuffle source-target match in a batch
             # if batch_size > 1:
             #     print('iter: ', self.local_iter)
             #     break_source_target_match(data)
             # Init/update ema model
-            if self.local_iter == 0:
+            if self.local_iter == ITERATION_TO_START_UDA + 1:
                 self._init_ema_weights()
-            if self.local_iter > 0:
-                self._update_ema(self.local_iter)
-            self.local_iter += 1
+            self._update_ema(self.local_iter)
 
             # source training
-            # self.optimizer.zero_grad()
-            # with autocast(dtype=self.precision):
-            #     loss_dict = self.model(data)
-            #     if isinstance(loss_dict, torch.Tensor):
-            #         losses_source = loss_dict
-            #         loss_dict = {"total_source_loss": loss_dict}
-            #     else:
-            #         losses_source = sum(loss_dict.values())
-
-            # self.grad_scaler.scale(losses_source).backward()
-            # self.grad_scaler.step(self.optimizer)
-            # self.grad_scaler.update()
-            ## if self.async_write_metrics:
-            ##     # write metrics asynchronically
-            ##     self.concurrent_executor.submit(self._write_metrics, loss_dict, data_time, iter=self.iter)
-            ## else:
-            ##     self._write_metrics(loss_dict, data_time)
+            if not MINI_BATCH_LOSS:
+                self.optimizer.zero_grad()
+                with autocast(dtype=self.precision):
+                    source_loss_dict = self.model(data)
+                    if isinstance(source_loss_dict, torch.Tensor):
+                        source_losses = source_loss_dict
+                        source_loss_dict = {"total_source_loss": source_loss_dict}
+                    else:
+                        source_losses = sum(source_loss_dict.values())
             
             ''' cindy : generate pseudo label for target and do mix '''
-            # if self.local_iter > 1:
             with torch.no_grad():
                 ''' cindy: forward with taget data in EMA '''
                 # for m in self.ema_model.modules():
@@ -580,17 +573,20 @@ class AMPTrainer(SimpleTrainer):
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
                     pseudo_instances = pseudo_labels[i]['instances']
-                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
-                    remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
-                    pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
+                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.8]
+                    update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
+                    if update_pseudo_label is None:
+                        pseudo_instances_num_list.append(0)
+                        continue
+                    else:
+                        pseudo_labels[i]['instances'] = update_pseudo_label
+                        pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
+                data_ori = copy.deepcopy(data[0])
                 data_copy = copy.deepcopy(data)
                 pseudo_labels_copy = copy.deepcopy(pseudo_labels)
-
-                # data_copy = data
-                # pseudo_labels_copy = pseudo_labels
                 if VISUL:
                     self.model.training = False
                     data[0]['source']['height'] = 1024
@@ -605,7 +601,6 @@ class AMPTrainer(SimpleTrainer):
                     cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_source_inference_color_instance.jpg', source_instances_img)
                     del source, source_instances, source_instances_img
                    
-                   
                 for i in range(batch_size):
                     if pseudo_instances_num_list[i] > 0:
                         data[i], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[i], pseudo_labels[i], self.local_iter, self.folder_name, self.source_rare_class_samples)
@@ -614,7 +609,6 @@ class AMPTrainer(SimpleTrainer):
 
                 ''' cindy: train with source2target mix data '''
                 ### cancle this train
-                self.optimizer.zero_grad()
                 if VISUL:
                     self.model.training = False
                     data[0]['source']['height'] = 1024
@@ -637,38 +631,54 @@ class AMPTrainer(SimpleTrainer):
                     del source_to_target_mix, source_to_target_mix_instances
                     del target_to_source_mix, target_to_source_mix_instances
 
-                self.model.training = True
-                mix_loss_dict = self.model(data)
-                if isinstance(mix_loss_dict, torch.Tensor):
-                    s2t_mix_losses = mix_loss_dict
-                    loss_dict = {"total_mix_loss": mix_loss_dict}
-                else:
-                    s2t_mix_losses = sum(mix_loss_dict.values())
+                if not MINI_BATCH_LOSS:
+                    self.model.training = True
+                    mix_loss_dict = self.model(data)
+                    if isinstance(mix_loss_dict, torch.Tensor):
+                        s2t_mix_losses = mix_loss_dict
+                        loss_dict = {"total_mix_loss": mix_loss_dict}
+                    else:
+                        s2t_mix_losses = sum(mix_loss_dict.values())
 
-                ''' cindy: train with target2source mix data '''
-                self.optimizer.zero_grad()
-                t2s_mix_loss_dict = self.model(data_copy)
-                if isinstance(t2s_mix_loss_dict, torch.Tensor):
-                    t2s_mix_losses = t2s_mix_loss_dict
-                    loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
+                    ''' cindy: train with target2source mix data '''
+                    t2s_mix_loss_dict = self.model(data_copy)
+                    if isinstance(t2s_mix_loss_dict, torch.Tensor):
+                        t2s_mix_losses = t2s_mix_loss_dict
+                        loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
+                    else:
+                        t2s_mix_losses = sum(t2s_mix_loss_dict.values())
+                    # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
+                    # unite_loss = s2t_mix_losses # ablation
+                    # unite_loss = t2s_mix_losses # ablation
+                    unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
+                    # unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
+                    # unite_loss = t2s_mix_losses
+                    unite_loss_dict = t2s_mix_loss_dict
                 else:
-                    t2s_mix_losses = sum(t2s_mix_loss_dict.values())
-                
-                # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
-                # unite_loss = s2t_mix_losses # ablation
-                # unite_loss = t2s_mix_losses # ablation
-                unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
-                # unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
-                # unite_loss = t2s_mix_losses
+                    ''' use mini batch loss ,one batch data=source+s2t+t2s ''' 
+                    self.optimizer.zero_grad()
+                    self.model.training = True
+                    assert batch_size % 3 == 0, f"Batch size must be a multiple of 3, but got {batch_size}"
+                    if batch_size == 3:
+                        data[0] = data_ori
+                        # data[1] = data[1]
+                        data[2] = data_copy[2]
+                    with autocast(dtype=self.precision):
+                        unite_loss_dict = self.model(data)
+                        if isinstance(unite_loss_dict, torch.Tensor):
+                            unite_loss = unite_loss_dict
+                            unite_loss_dict = {"total_source_loss": unite_loss_dict}
+                        else:
+                            unite_loss = sum(unite_loss_dict.values())
 
                 self.grad_scaler.scale(unite_loss).backward()
                 self.grad_scaler.step(self.optimizer)
                 self.grad_scaler.update()
                 if self.async_write_metrics:
                     # write metrics asynchronically
-                    self.concurrent_executor.submit(self._write_metrics, t2s_mix_loss_dict, data_time, iter=self.iter)
+                    self.concurrent_executor.submit(self._write_metrics, unite_loss_dict, data_time, iter=self.iter)
                 else:
-                    self._write_metrics(t2s_mix_loss_dict, data_time)
+                    self._write_metrics(unite_loss_dict, data_time)
 
             if self.log_grad_scaler:
                 storage = get_event_storage()
@@ -677,6 +687,8 @@ class AMPTrainer(SimpleTrainer):
 
 
         else:
+            if 'source' in data[0]:
+                data = [x['source'] for x in data]
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()
             with autocast(dtype=self.precision):
@@ -708,129 +720,6 @@ class AMPTrainer(SimpleTrainer):
 
             self.grad_scaler.step(self.optimizer)
             self.grad_scaler.update()
-
-                    
-    def run_step_bp(self):
-        """
-        Implement the AMP training logic.
-        """
-        assert self.model.training, "[AMPTrainer] model was changed to eval mode!"
-        assert torch.cuda.is_available(), "[AMPTrainer] CUDA is required for AMP training!"
-        from torch.cuda.amp import autocast
-
-        start = time.perf_counter()
-        data = next(self._data_loader_iter)
-        data_time = time.perf_counter() - start
-        if 'source' in data[0]:# cindy add 
-            batch_size = len(data)
-            # Init/update ema model
-            if self.local_iter == 0:
-                self._init_ema_weights()
-            if self.local_iter > 0:
-                self._update_ema(self.local_iter)
-            self.local_iter += 1
-
-            self.optimizer.zero_grad()
-            with autocast(dtype=self.precision):
-                loss_dict = self.model(data)
-                if isinstance(loss_dict, torch.Tensor):
-                    losses_source = loss_dict
-                    loss_dict = {"total_source_loss": loss_dict}
-                else:
-                    losses_source = sum(loss_dict.values())
-
-            self.grad_scaler.scale(losses_source).backward()
-            self.grad_scaler.step(self.optimizer)
-            self.grad_scaler.update()
-            # if self.async_write_metrics:
-            #     # write metrics asynchronically
-            #     self.concurrent_executor.submit(self._write_metrics, loss_dict, data_time, iter=self.iter)
-            # else:
-            #     self._write_metrics(loss_dict, data_time)
-            
-            # ''' cindy : generate pseudo label for target and do mix '''
-            if self.local_iter > 10:
-                with torch.no_grad():
-                    ''' cindy: forward with taget data in EMA '''
-                    # for m in self.ema_model.modules():
-                    #     m.training = False
-                    self.ema_model.training = False
-                    # Generate pseudo-label
-                    pseudo_labels = self.ema_model(data, target=True) 
-                    pseudo_instances_num_list = []
-                    for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
-                        pseudo_instances = pseudo_labels[i]['instances']
-                        pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.8]
-                        pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
-                # pseudo instance use to mix
-                any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
-                if any_greater_than_zero:    
-                    # TODO  OPEN , TO SEE WAHT HAPPEN WITHOUT MIX
-                    # data_copy = copy.deepcopy(data)
-                    # pseudo_labels_copy = copy.deepcopy(pseudo_labels)
-                    
-                    for i in range(batch_size):
-                        if pseudo_instances_num_list[i] > 0:
-                            data[i] = source_instance_paste_to_target_mix(data[i], pseudo_labels[i], self.local_iter, self.folder_name)
-                            # data_copy[i] = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name)
-
-                            
-                    ''' cindy: train with mix data '''
-                    self.optimizer.zero_grad()
-                    mix_loss_dict = self.model(data)
-                    if isinstance(mix_loss_dict, torch.Tensor):
-                        mix_losses = mix_loss_dict
-                        loss_dict = {"total_mix_loss": mix_loss_dict}
-                    else:
-                        mix_losses = sum(mix_loss_dict.values())
-                    self.grad_scaler.scale(mix_losses).backward()
-                    self.grad_scaler.step(self.optimizer)
-                    self.grad_scaler.update()
-                    if self.async_write_metrics:
-                        # write metrics asynchronically
-                        self.concurrent_executor.submit(self._write_metrics, mix_loss_dict, data_time, iter=self.iter)
-                    else:
-                        self._write_metrics(mix_loss_dict, data_time)
-
-            if self.log_grad_scaler:
-                storage = get_event_storage()
-                storage.put_scalar("[metric]grad_scaler", self.grad_scaler.get_scale())
-            self.after_backward()
-
-
-        else:
-            if self.zero_grad_before_forward:
-                self.optimizer.zero_grad()
-            with autocast(dtype=self.precision):
-                loss_dict = self.model(data)
-                if isinstance(loss_dict, torch.Tensor):
-                    losses = loss_dict
-                    loss_dict = {"total_loss": loss_dict}
-                else:
-                    losses = sum(loss_dict.values())
-
-            if not self.zero_grad_before_forward:
-                self.optimizer.zero_grad()
-
-            self.grad_scaler.scale(losses).backward()
-
-            if self.log_grad_scaler:
-                storage = get_event_storage()
-                storage.put_scalar("[metric]grad_scaler", self.grad_scaler.get_scale())
-
-            self.after_backward()
-
-            if self.async_write_metrics:
-                # write metrics asynchronically
-                self.concurrent_executor.submit(
-                    self._write_metrics, loss_dict, data_time, iter=self.iter
-                )
-            else:
-                self._write_metrics(loss_dict, data_time)
-
-            self.grad_scaler.step(self.optimizer)
-            self.grad_scaler.update()
-
 
     def state_dict(self):
         ret = super().state_dict()
