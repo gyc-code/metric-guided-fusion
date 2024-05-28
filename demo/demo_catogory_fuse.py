@@ -41,7 +41,7 @@ from detectron2.data import MetadataCatalog
 from cityscapesscripts.helpers.labels import name2label
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 # constants
 WINDOW_NAME = "mask2former demo"
@@ -101,7 +101,7 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl'],
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
+        default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
         
@@ -213,7 +213,7 @@ def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_fol
     # print('cat time is :',ss)
     cpu_device = torch.device("cpu")
     instances = predictions_fuse.to(cpu_device)
-    instances = instances[instances.scores.cpu() > 0.9]
+    instances = instances[instances.scores.cpu() > 0.85]
     color_pseudo_instances = visulize_color_instances(instances)
 
     mask_vis_output = visualizer.draw_instance_predictions(predictions=instances)
@@ -227,6 +227,7 @@ def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_fol
     pred_txt = os.path.join(result_save_folder, basename + "_pred.txt")
     visual_pred = 255 * np.ones(img.shape, dtype=np.uint8)
     visual_pred_filename = os.path.join(visul_save_folder, basename + "_visual_pred.png")
+    print(visual_pred_filename)
     error_map_filename = os.path.join(visul_save_folder, basename + "_error_map.png")
 
     color_pseudo_instances_path = os.path.join(visul_save_folder, basename + "_instance.png")

@@ -179,7 +179,9 @@ class CityscapesInstanceEvaluator(CityscapesEvaluator):
             )["averages"]
 
             ret = OrderedDict()
-            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+            # ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100, "AP50m": results["allAp50m"] * 100, 
+                           "AP100m": results["allAp100m"] * 100, "AP50%50m": results["allAp50%50m"] * 100}
             self._working_dir.cleanup() 
             return ret
         except:
@@ -311,9 +313,10 @@ class CityscapesInstance2SemSegEvaluator(CityscapesEvaluator):
                         )   
                     Image.fromarray(pred).save(pred_filename)
 
-                    # visual_pred_color = process_train_id_to_color_img(visual_pred)
-                    # pred_gt, gt_color = cat_pred_gt(visual_pred_color, file_name)
-                    # Image.fromarray(pred_gt.astype("uint8")).save(visual_pred_filename)
+                    visual_pred_color = process_train_id_to_color_img(visual_pred)
+                    pred_gt, gt_color = cat_pred_gt(visual_pred_color, file_name)
+                    print('save', visual_pred_filename)
+                    Image.fromarray(pred_gt.astype("uint8")).save(visual_pred_filename)
                     
             else:
                 # Cityscapes requires a prediction file for every ground truth image.
