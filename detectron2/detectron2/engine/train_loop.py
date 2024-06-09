@@ -25,7 +25,7 @@ __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 TOTAL_LOSS = True
 
 VISUL = False
-ITERATION_TO_START_UDA = 5000
+ITERATION_TO_START_UDA = 1
 MINI_BATCH_LOSS = True
 
 class HookBase:
@@ -573,7 +573,7 @@ class AMPTrainer(SimpleTrainer):
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
                     pseudo_instances = pseudo_labels[i]['instances']
-                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.8]
+                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
                     update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
                     if update_pseudo_label is None:
                         pseudo_instances_num_list.append(0)
@@ -581,12 +581,13 @@ class AMPTrainer(SimpleTrainer):
                     else:
                         pseudo_labels[i]['instances'] = update_pseudo_label
                         pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
+                    data[i]['target']['instances'] = pseudo_labels[i]['instances']
+                del pseudo_labels
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
                 data_ori = copy.deepcopy(data[0])
                 data_copy = copy.deepcopy(data)
-                pseudo_labels_copy = copy.deepcopy(pseudo_labels)
                 if VISUL:
                     self.model.training = False
                     data[0]['source']['height'] = 1024
@@ -603,9 +604,9 @@ class AMPTrainer(SimpleTrainer):
                    
                 for i in range(batch_size):
                     if pseudo_instances_num_list[i] > 0:
-                        data[i], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[i], pseudo_labels[i], self.local_iter, self.folder_name, self.source_rare_class_samples)
+                        data[i], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[i], self.local_iter, self.folder_name, self.source_rare_class_samples)
                         # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
-                        data_copy[i] = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name)
+                        data_copy[i] = target_instance_paste_to_source_mix(data_copy[i], self.local_iter, self.folder_name)
 
                 ''' cindy: train with source2target mix data '''
                 ### cancle this train
