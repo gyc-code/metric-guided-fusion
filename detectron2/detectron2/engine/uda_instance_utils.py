@@ -31,7 +31,7 @@ __all__ = [
 
 DEBUG_IMG_FLAG = False
 VISUALIZE_POLYGON=False
-visual_iter = 100
+visual_iter = 1
 Target_coefficients = None
 Source_coefficients = None
 
@@ -185,32 +185,7 @@ def visulize_color_instances(instances):
 
     return color_instances
 
-def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, folder_name, source_rare_class_samples):
-    global Target_coefficients
-    gt_instance = one_data['source']['instances']
-    gt_classes = gt_instance.gt_classes
-    # gt_polygons = gt_syn.gt_masks
-    gt_masks = gt_instance.gt_masks
-    source_img = one_data['source']['image']
-    _, hs, ws = source_img.shape
-
-    target_img = one_data['target']['image']
-    pseudo_instances = pseudo_label['instances']
-    file_id = one_data['target']['image_id'].split('.')[0]
-
-    # if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-    #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_img_black.jpg', target_img.permute(1,2,0).numpy())
-    #     instance_poly2color_semantic(gt_instance, hs, ws, folder_name, file_id, local_iter)
-    #     instance_poly2color_semantic(pseudo_instances, hs, ws, folder_name, file_id, local_iter, flag='pseudo')
-    if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-        target_img_vis = target_img.cpu().permute(1,2,0).numpy()
-        target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
-        cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_ori.jpg', target_img_vis)
-        instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
-        gt_color_instances = visulize_color_instances(gt_instance)
-
-    gt_instance_select = Instances((hs, ws))
-    THIS_FRAME_HAS_RARE_CLASSES = False
+def polyfit(pseudo_instances):
     center_row_list = []
     height_list = []
     for i, pred_mask in enumerate(pseudo_instances.pred_masks):
@@ -256,44 +231,89 @@ def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, fold
         ########  to show ###########################
     else:
         print('use last target_coefficients')
+        # 计算前景高度
+    min_row = foreground_indices[:, 0].min().item()
+    max_row = foreground_indices[:, 0].max().item()
+    height = max_row - min_row + 1
+
+    # if Target_coefficients is not None:
+    #     foreground_indices = obj_mask.nonzero(as_tuple=False)
+    #     # 计算中心坐标
+    #     center_row = int(foreground_indices.float().mean(dim=0)[0].item())
+    #     # 创建一个多项式对象
+    #     polynomial = np.poly1d(Target_coefficients)
+    #     # 生成预测值
+    #     # heights_fit = np.linspace(min(height_list), max(height_list), 100)
+    #     center_row_fit = int(polynomial(height))
+    #     # x_shift = random.randint(-150, 150)
+    #     x_shift = 0
+    #     y_shift = center_row_fit - center_row
+    #     # print(center_row_fit, center_row, y_shift)
+    # else:
+    #     ''' shift obj_mask'''
+    #     x_shift = random.randint(-150, 150)
+    #     if height < 100: # TODO : CHANEG TO height
+    #         y_shift = random.randint(-100, -50)
+    #     else:
+    #         y_shift = random.randint(0, 100)
+    #     # x_shift = 0
+    #     # y_shift = 0
+
+def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
+    depths_array = obj_depth_map[obj_mask]
+    counts = np.bincount(depths_array)
+    obj_depth = np.argmax(counts)
+    region_in_paste_img = depth_map_to_paste == obj_depth
+    foreground_coords = np.column_stack(np.where(region_in_paste_img))
+    if foreground_coords.size == 0:
+        print('no this depth in image to paste')
+        return 0,0
+    depth_center_y_to_paste, depth_center_x_to_paste = foreground_coords.mean(axis=0)
+
+    obj_foreground_coords = np.column_stack(np.where(obj_mask))
+    obj_center_y, obj_center_x = obj_foreground_coords.mean(axis=0)# TODO  不用中心  用最低值也就是接地点，超过60米就放弃 或者不直接用深度来贴图  而是用来检测远处
+    # cv2.imwrite('obj_area.png',((obj_mask*1)*255).numpy())
+    # cv2.imwrite('obj_target_depth_' + str(obj_depth) + '.png',((region_in_paste_img*1)*255))
+
+    return int(depth_center_x_to_paste - obj_center_x), int(depth_center_y_to_paste - obj_center_y)
+
+def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
+    global Target_coefficients
+    depth_map_source = one_data['source']['depth'].astype(int)
+    depth_map_target = one_data['target']['depth'].astype(int)
+    gt_instance = one_data['source']['instances']
+    gt_classes = gt_instance.gt_classes
+    # gt_polygons = gt_syn.gt_masks
+    gt_masks = gt_instance.gt_masks
+    source_img = one_data['source']['image']
+    _, hs, ws = source_img.shape
+
+    target_img = one_data['target']['image']
+    pseudo_instances = one_data['target']['instances']
+    # pseudo_instances = pseudo_label['instances']
+    file_id = one_data['target']['image_id'].split('.')[0]
+
+    # if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
+    #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_img_black.jpg', target_img.permute(1,2,0).numpy())
+    #     instance_poly2color_semantic(gt_instance, hs, ws, folder_name, file_id, local_iter)
+    #     instance_poly2color_semantic(pseudo_instances, hs, ws, folder_name, file_id, local_iter, flag='pseudo')
+    if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
+        target_img_vis = target_img.cpu().permute(1,2,0).numpy()
+        target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_ori.jpg', target_img_vis)
+        instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
+        gt_color_instances = visulize_color_instances(gt_instance)
+
+    gt_instance_select = Instances((hs, ws))
+    THIS_FRAME_HAS_RARE_CLASSES = False
 
     for i, obj_mask in enumerate(gt_masks):
         instance_size = (obj_mask*1).sum().item()
         if instance_size == 0:
             continue 
-        # 计算前景高度
-        min_row = foreground_indices[:, 0].min().item()
-        max_row = foreground_indices[:, 0].max().item()
-        height = max_row - min_row + 1
-
-        # if Target_coefficients is not None:
-        #     foreground_indices = obj_mask.nonzero(as_tuple=False)
-        #     # 计算中心坐标
-        #     center_row = int(foreground_indices.float().mean(dim=0)[0].item())
-        #     # 创建一个多项式对象
-        #     polynomial = np.poly1d(Target_coefficients)
-        #     # 生成预测值
-        #     # heights_fit = np.linspace(min(height_list), max(height_list), 100)
-        #     center_row_fit = int(polynomial(height))
-        #     # x_shift = random.randint(-150, 150)
-        #     x_shift = 0
-        #     y_shift = center_row_fit - center_row
-        #     # print(center_row_fit, center_row, y_shift)
-        # else:
-        #     ''' shift obj_mask'''
-        #     x_shift = random.randint(-150, 150)
-        #     if height < 100: # TODO : CHANEG TO height
-        #         y_shift = random.randint(-100, -50)
-        #     else:
-        #         y_shift = random.randint(0, 100)
-        #     # x_shift = 0
-        #     # y_shift = 0
+        x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_source, depth_map_target)
         ''' shift obj_mask'''
         x_shift = random.randint(-150, 150)
-        if height < 100:
-            y_shift = random.randint(-100, -50)
-        else:
-            y_shift = random.randint(0, 100)
         # print('x_shift, y_shift :', x_shift, y_shift, ", height: ", height)
         shift_obj_mask, shift_source_image = translated_obj_mask(obj_mask,source_img, dx=x_shift,dy=y_shift)        
         ins = Instances((hs, ws))
@@ -368,16 +388,19 @@ def source_instance_paste_to_target_mix(one_data, pseudo_label, local_iter, fold
     return one_data, source_rare_class_samples
 
 
-def target_instance_paste_to_source_mix(one_data, pseudo_label, local_iter, folder_name, target_rare_class_samples=[]):
+def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, target_rare_class_samples=[]):
     gt_instance = one_data['source']['instances']
     gt_classes = gt_instance.gt_classes
+    depth_map_source = one_data['source']['depth'].astype(int)
+    depth_map_target = one_data['target']['depth'].astype(int)
     # gt_polygons = gt_syn.gt_masks
     gt_masks = gt_instance.gt_masks
     source_img = one_data['source']['image']
     _, hs, ws = source_img.shape
 
     target_img = one_data['target']['image']
-    pseudo_instances = pseudo_label['instances']
+    pseudo_instances = one_data['target']['instances']
+    # pseudo_instances = pseudo_label['instances']
     pred_masks = pseudo_instances.pred_masks
     pred_classes = pseudo_instances.pred_classes
     file_id = one_data['target']['image_id'].split('.')[0]
@@ -397,18 +420,19 @@ def target_instance_paste_to_source_mix(one_data, pseudo_label, local_iter, fold
     for i, obj_mask in enumerate(pred_masks.cpu()):
     # for i in range(gt_masks.shape[0]):
         instance_size = (obj_mask).sum().item()
-        # if instance_size < 3000:# TODO to use all
-        #     continue
+        if instance_size == 0:
+            continue 
+        obj_mask = obj_mask.bool()
+        x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_target, depth_map_source)
         
         ''' shift obj_mask'''
-        x_shift = random.randint(0, 150)
-        if instance_size < 5000: # TODO : CHANEG TO height
-            y_shift = random.randint(-100, -50)
-        else:
-            y_shift = random.randint(0, 100)
+        x_shift = random.randint(-150, 150)
+        # if instance_size < 5000: 
+        #     y_shift = random.randint(-100, -50)
+        # else:
+        #     y_shift = random.randint(0, 100)
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
 
-        obj_mask = obj_mask.bool()
         ins = Instances((hs, ws))
         ins.gt_classes = pred_classes[i].cpu().view(1)
         ins.gt_masks = shift_obj_mask.cpu().view(1, hs, ws)
@@ -442,7 +466,7 @@ def target_instance_paste_to_source_mix(one_data, pseudo_label, local_iter, fold
         one_data['source']['image'] = source_img
         if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
             color_instances = visulize_color_instances(one_data['source']['instances'])
-            color_pseudo_instances = visulize_color_instances(pseudo_label['instances'])
+            color_pseudo_instances = visulize_color_instances(pseudo_instances)
             
             target_img_vis = target_img.cpu().permute(1,2,0).numpy()
             source_img_vis = source_img.cpu().permute(1,2,0).numpy()
