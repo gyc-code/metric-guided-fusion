@@ -59,6 +59,34 @@ class WarmupPolyLR(LRScheduler):
             for base_lr in self.base_lrs
         ]
 
+    ######  restart poly 
+    # def get_lr(self) -> List[float]:
+    #     warmup_factor = _get_warmup_factor_at_iter(
+    #         self.warmup_method, self.last_epoch, self.warmup_iters, self.warmup_factor
+    #     )
+    #     if self.constant_ending > 0 and warmup_factor == 1.0:
+    #         # Constant ending lr.
+    #         if (
+    #             math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
+    #             < self.constant_ending
+    #         ):
+    #             return [base_lr * self.constant_ending for base_lr in self.base_lrs]
+    #     print([base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
+    #         for base_lr in self.base_lrs][0])
+    #     ''' poly schedule for every 15000, and then restart, train for 40k'''
+    #     restart_max_iters = 20000
+    #     if self.last_epoch < restart_max_iters:
+    #         return [
+    #             base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / restart_max_iters), self.power)
+    #             for base_lr in self.base_lrs
+    #         ]
+    #     else:
+    #         restart_last_epoch = self.last_epoch - restart_max_iters
+    #         return [
+    #             base_lr * warmup_factor * math.pow((1.0 - restart_last_epoch / restart_max_iters), self.power)
+    #             for base_lr in self.base_lrs
+    #         ]    
+
     def _compute_values(self) -> List[float]:
         # The new interface
         return self.get_lr()
