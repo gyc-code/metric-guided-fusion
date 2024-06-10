@@ -3,12 +3,16 @@ output
 instant_test_output
 inference_test_output
 
-.datasets/*
+*.txt
+*.yaml
+*.sh
+# datasets/
+datasets_bp/
 *.png
 *.json
 *.diff
 *.jpg
-!/projects/DensePose/doc/images/*.jpg
+# !/projects/DensePose/doc/images/*.jpg
 
 # compilation and distribution
 __pycache__
@@ -44,10 +48,10 @@ model_ts*.txt
 .vscode
 _darcs
 
-# project dirs
-/detectron2/model_zoo/configs
-/datasets/*
-!/datasets/*.*
-/projects/*/datasets
-/models
-/snippet
+# # project dirs
+# /detectron2/model_zoo/configs
+# /datasets/*
+# !/datasets/*.*
+# /projects/*/datasets
+# /models
+# /snippet
