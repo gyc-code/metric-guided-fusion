@@ -1,0 +1,56 @@
+_BASE_: ../maskformer2_R50_bs16_90k.yaml
+MODEL:
+  BACKBONE:
+    NAME: "D2SwinTransformer"
+  SWIN:
+    EMBED_DIM: 192
+    DEPTHS: [2, 2, 18, 2]
+    NUM_HEADS: [6, 12, 24, 48]
+    WINDOW_SIZE: 12
+    APE: False
+    DROP_PATH_RATE: 0.3
+    PATCH_NORM: True
+    PRETRAIN_IMG_SIZE: 384
+  # WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # TODO : change to imagenet pretrain
+  WEIGHTS: "./output/inst/inst_urbansyn_30klr0.0001_power3_allmix_minibatch_loss/model_best.pth"
+  # "./output/urabn_1024_vehicle_bs3from_coco/model_best.pth"
+  # './output/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth 
+  # ./output/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'
+  #"./output/urbansyn_from_coco/model_best.pth" # for double mix ablation
+  # "./output/urabn_1024_vehicle_second_bs3from_coco/model_best.pth"
+  # "./output/urabn_1024_vehicle_third_bs3from_coco/model_best.pth"
+  #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" 
+  #"./output/urabn_1024_human_cycle_third_bs3from_coco/model_best.pth"
+  #"output/urbansyn_from_coco/model_best_42k_32-8.pth"
+  #"./output/urabn_1024_human_cycle_bs3from_coco/model_best.pth" 
+  #"output/uda_urabn_v1_1024_1024_from_coco/model_best.pth" 
+  #"pretrain/cityscapes-mask2former-200queries-swinL-90k-model_final_dfa862.pkl" 
+  #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
+  ##  #"swin_large_patch4_window12_384_22k.pkl"
+  PIXEL_MEAN: [123.675, 116.280, 103.530]
+  PIXEL_STD: [58.395, 57.120, 57.375]
+  MASK_FORMER:
+    NUM_OBJECT_QUERIES: 200
+SOLVER:
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 100000
+  BASE_LR: 0.0001
+  MAX_ITER: 900000
+
+DATASETS:
+  TRAIN: ("uda_syn_real_instance_seg_train",)
+  #("synscapes_human_cycle_instance_seg_train",)
+  #("synscapes_instance_seg_train",) 
+  #("urbansyn_vehicle_instance_seg_train",)
+  # ("uda_syn_real_vehicle_instance_seg_train",)
+  # ("uda_syn_real_human_cycle_instance_seg_train",)
+  # #("uda_syn_real_instance_seg_train",) 
+  #('urbansyn_human_cycle_instance_seg_train',) 
+  #("urbansyn_vehicle_instance_seg_train",) 
+  #("urbansyn_instance_seg_train",) 
+  # ("uda_syn_real_human_cycle_instance_seg_train",)
+  TEST: ("cityscapes_fine_instance_seg_val",)
+TEST:
+  EVAL_PERIOD: 1000
+OUTPUT_DIR: "./output/urbansyn_from_scratch"
+# VIS_PERIOD: 1

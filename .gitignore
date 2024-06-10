@@ -4,12 +4,14 @@ instant_test_output
 inference_test_output
 
 *.txt
-*.yaml
-*.sh
+# *.yaml
+# *.sh
 # datasets/
 datasets_bp/
 tmp/
 *.png
+!/template/*.png
+
 *.json
 *.diff
 *.jpg
@@ -46,7 +48,7 @@ model_ts*.txt
 
 # editor settings
 .idea
-.vscode
+# .vscode
 _darcs
 
 # # project dirs
