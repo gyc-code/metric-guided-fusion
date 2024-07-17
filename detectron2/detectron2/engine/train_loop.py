@@ -7,6 +7,7 @@ import time
 import datetime
 import copy
 import os
+import random
 import weakref
 from typing import List, Mapping, Optional
 import torch
@@ -25,7 +26,7 @@ __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 TOTAL_LOSS = True
 
 VISUL = False
-ITERATION_TO_START_UDA = 1
+ITERATION_TO_START_UDA = 10000
 MINI_BATCH_LOSS = True
 
 class HookBase:
@@ -688,8 +689,13 @@ class AMPTrainer(SimpleTrainer):
 
 
         else:
-            if 'source' in data[0]:
+            if 'source' in data[0]: # when local_iter < ITERATION_TO_START_UDA, also use only source training
                 data = [x['source'] for x in data]
+                if random.randint(0, 1): # make the source only train using somethimes with far_away_image TODO: see improve far object instance  or not ?
+                    for x in data:
+                        x['image'] = x['far_region_image']
+                        x['instances'] = x['far_region_instances']
+
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()
             with autocast(dtype=self.precision):
