@@ -5,6 +5,10 @@ from torch.nn import functional as F
 from detectron2.layers import cat, shapes_to_tensor
 from detectron2.structures import BitMasks, Boxes
 
+# debug
+import cv2
+import time
+
 
 """
 Shape shorthand in this module:
@@ -89,6 +93,15 @@ def get_uncertain_point_coords_with_randomness(
     num_sampled = int(num_points * oversample_ratio)
     point_coords = torch.rand(num_boxes, num_sampled, 2, device=coarse_logits.device)
     point_logits = point_sample(coarse_logits, point_coords, align_corners=False)
+
+    ############## cindy debug
+    # time_now = str(time.time())
+    # for i in range(coarse_logits.shape[0]):
+    #     mask = (coarse_logits[i,0]>0).cpu().numpy()*200
+    #     cv2.imwrite('/home/yguo/Documents/other/UDA4Inst/debug_cindy_1/' + time_now + '_n' + str(i) + '-' + '.png', mask)
+
+
+    ###############
     # It is crucial to calculate uncertainty based on the sampled prediction value for the points.
     # Calculating uncertainties of the coarse predictions first and sampling them for points leads
     # to incorrect results.
