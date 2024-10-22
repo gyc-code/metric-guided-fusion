@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 
 from skimage import measure
 from PIL import Image
+import time
+import clip
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 
 from detectron2.structures.masks import polygons_to_bitmask
 
@@ -16,6 +19,7 @@ import detectron2.utils.comm as comm
 from detectron2.utils.events import EventStorage, get_event_storage
 from detectron2.utils.logger import _log_api_usage
 from detectron2.structures import PolygonMasks, Instances
+from collections import Counter
 
 __all__ = [
 "instance_poly2color_semantic",
@@ -30,8 +34,8 @@ __all__ = [
 ]
 
 DEBUG_IMG_FLAG = False
-VISUALIZE_POLYGON=False
-visual_iter = 1
+VISUALIZE_POLYGON = False
+visual_iter = 500
 Target_coefficients = None
 Source_coefficients = None
 
@@ -42,6 +46,8 @@ RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR T
 
 def translated_obj_mask(obj_mask,image, dx=50,dy=50):
     ''' dx control col, dy control row,dy > 0, move down, dx > 0, move right'''
+    if dx==0 and dy==0:
+        return obj_mask, image
     # 获取mask的形状
     rows, cols = obj_mask.shape
     # 创建平移后的mask
@@ -260,6 +266,10 @@ def polyfit(pseudo_instances):
     #     # y_shift = 0
 
 def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
+    ''' depth of object gotten from obj_depth_map is the source depth, 
+    and find this depth in depth_map_to_paste to know where to paste.
+    the row to paste is important to know and the col can be random shift
+    '''
     depths_array = obj_depth_map[obj_mask]
     counts = np.bincount(depths_array)
     obj_depth = np.argmax(counts)
@@ -267,14 +277,12 @@ def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
     foreground_coords = np.column_stack(np.where(region_in_paste_img))
     if foreground_coords.size == 0:
         print('no this depth in image to paste')
-        return 0,0
-    depth_center_y_to_paste, depth_center_x_to_paste = foreground_coords.mean(axis=0)
-
+        return 0, 0
+    depth_center_y_to_paste, depth_center_x_to_paste = foreground_coords.mean(axis=0) ## TODO BUG . need depth of road surface  use person person
     obj_foreground_coords = np.column_stack(np.where(obj_mask))
-    obj_center_y, obj_center_x = obj_foreground_coords.mean(axis=0)# TODO  不用中心  用最低值也就是接地点，超过60米就放弃 或者不直接用深度来贴图  而是用来检测远处
+    obj_center_y, obj_center_x = obj_foreground_coords.mean(axis=0)
     # cv2.imwrite('obj_area.png',((obj_mask*1)*255).numpy())
     # cv2.imwrite('obj_target_depth_' + str(obj_depth) + '.png',((region_in_paste_img*1)*255))
-
     return int(depth_center_x_to_paste - obj_center_x), int(depth_center_y_to_paste - obj_center_y)
 
 def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
@@ -293,10 +301,6 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
     # pseudo_instances = pseudo_label['instances']
     file_id = one_data['target']['image_id'].split('.')[0]
 
-    # if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-    #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_img_black.jpg', target_img.permute(1,2,0).numpy())
-    #     instance_poly2color_semantic(gt_instance, hs, ws, folder_name, file_id, local_iter)
-    #     instance_poly2color_semantic(pseudo_instances, hs, ws, folder_name, file_id, local_iter, flag='pseudo')
     if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
         target_img_vis = target_img.cpu().permute(1,2,0).numpy()
         target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
@@ -311,10 +315,15 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         instance_size = (obj_mask*1).sum().item()
         if instance_size == 0:
             continue 
-        x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_source, depth_map_target)
+        # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_source, depth_map_target)
         ''' shift obj_mask'''
-        x_shift = random.randint(-150, 150)
-        # print('x_shift, y_shift :', x_shift, y_shift, ", height: ", height)
+        # x_shift = random.randint(-250, 250)
+        # if instance_size < 5000: 
+        #     y_shift = random.randint(-100, -50)
+        # else:
+        #     y_shift = random.randint(0, 100)
+        x_shift, y_shift = 0, 0
+
         shift_obj_mask, shift_source_image = translated_obj_mask(obj_mask,source_img, dx=x_shift,dy=y_shift)        
         ins = Instances((hs, ws))
         ins.gt_classes = gt_classes[i].view(1)
@@ -423,14 +432,15 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
         if instance_size == 0:
             continue 
         obj_mask = obj_mask.bool()
-        x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_target, depth_map_source)
-        
+        # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_target, depth_map_source) # TODO SHIFT FOR THIS
+        x_shift, y_shift = 0, 0
         ''' shift obj_mask'''
-        x_shift = random.randint(-150, 150)
+        # x_shift = random.randint(-250, 250)
         # if instance_size < 5000: 
         #     y_shift = random.randint(-100, -50)
         # else:
         #     y_shift = random.randint(0, 100)
+        
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
 
         ins = Instances((hs, ws))
@@ -495,3 +505,435 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
     # return one_data, target_rare_class_samples
     return one_data
 
+
+def  dynamic_threshold_by_size(size_obj, image_size):
+    ''' this paramters make threshold in 0.75-0.95'''
+    base_size = image_size/10
+    normalized_area = 1 if (size_obj / base_size) > 1 else (size_obj / base_size)
+    # 设定参数
+    d = 0.75
+    b = 1
+    a = 0.2 / np.log(b + 1)
+    return a * np.log(b * normalized_area + 1) + d
+
+
+
+def refine_class_combine_clip_m2f(clip_result, m2f_result, update_flag=False): # instance_mask_size, image_shape,
+    ''' combine CLIP with mask2former result, 
+    if m2f output score<thre and clip is confident, use clip, 
+    then if clip output is beyond CITYSCAPES_THING_CLASSES, make m2f score low. 
+    while if in CITYSCAPES_THING_CLASSES, use clip result and update class and score of m2f '''
+    clip_class, clip_score, clip_probs = clip_result[0], clip_result[1], clip_result[2], 
+    m2f_class, m2f_score, m2f_probs = m2f_result[0], m2f_result[1], m2f_result[2]
+
+    if m2f_class == clip_class:
+        return m2f_class, 1.0, update_flag # pretty sure about class
+    else:#if not the same class,update
+        # c, w, h = image_shape
+        # image_size = w * h
+        # # m2f_score_threshold = dynamic_threshold_by_size(instance_mask_size, image_size)
+        # m2f_score_threshold = 0.9
+        # if m2f_score < m2f_score_threshold and clip_score > 0.5:
+        #     update_class = True
+        #     return clip_class, m2f_score*1.2 if m2f_score*1.2<1.0 else 1.0, update_class
+        # else:
+        #     return m2f_class, m2f_score, update_class
+        update_flag = True
+        combined_class, combined_score = combine_clip_m2f_result(clip_probs, m2f_probs)
+        return combined_class, combined_score, update_flag
+
+def bar_chart_probs(classes, probs, save_name):
+    ''' generate bar chart for the probs'''
+    plt.figure(figsize=(10, 6))
+    plt.bar(classes, probs, color='skyblue')
+    plt.title('Probabilities for Each Category')
+    plt.xlabel('Category')
+    plt.ylabel('Probability')
+    plt.xticks(rotation=90)
+    plt.tight_layout()  # 自动调整子图参数，使之填充整个图像区域
+    plt.savefig(save_name.replace('.png', '_bar_chart.png'))
+    plt.close()  # 关闭图表以释放内存
+    
+def entropy(p):
+    if p.device.type == 'cpu':
+        p = p.cuda() 
+    return -torch.sum(p * torch.log(p + 1e-15))
+
+
+def combine_clip_m2f_result(clip_probs, mask2former_probs):
+    # multiply the two probabilities
+    # TODO: m2f overwhelmingly confident, clip is not confident, use model
+    if 0:
+        combined_probs = clip_probs * mask2former_probs
+    if 0:
+        # normalize the probabilities
+        logits_a = np.log(clip_probs + 1e-15)  # 加上微小值防止 log(0)
+        logits_b = np.log(mask2former_probs + 1e-15)
+        combined_logits = logits_a + logits_b
+        combined_probs = np.exp(combined_logits)
+    if 0:
+        # 计算模型 A 和模型 B 的熵值
+        entropy_a = entropy(clip_probs).cpu()
+        entropy_b = entropy(mask2former_probs).cpu()
+        
+        # 计算平滑因子 alpha
+        alpha = entropy_a / (entropy_b + 1e-15)
+        
+        # 对模型 B 的概率进行调整
+        adjusted_probs_b = torch.pow(mask2former_probs, alpha)
+        adjusted_probs_b /= adjusted_probs_b.sum()
+        
+        # 重新进行概率乘积法
+        combined_probs = clip_probs * adjusted_probs_b
+    if 0:# too trust clip
+        combined_probs = 0.7*clip_probs + 0.3*mask2former_probs
+    if 1:
+        # 获取排序的索引（从高到低）
+        ranks_a = torch.argsort(-clip_probs)
+        ranks_b = torch.argsort(-mask2former_probs)
+        
+        # 对每个类别计算平均排名
+        avg_ranks = (ranks_a + ranks_b) / 2.0
+        
+        # 根据平均排名得到最终预测
+        combined_probs = torch.zeros_like(clip_probs)
+        combined_probs[0][torch.argmin(avg_ranks)] = 1.0  # 将概率置于 1.0
+        return torch.argmin(avg_ranks), 1.0
+        
+        
+    combined_probs /= combined_probs.sum()
+    final_prediction_class = np.argmax(combined_probs)
+    print('clip_probs : ', clip_probs, ',mask2former_probs : ', mask2former_probs)
+    print('final_prediction_probs : ', combined_probs)
+    return final_prediction_class, combined_probs.max()
+    
+def correct_label_by_GT(instances, image_path):
+    ''' correct instance result according to semantic GT '''
+    # image_path='/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val/frankfurt/frankfurt_000000_000294_leftImg8bit.png'
+    # semantic='/datafast/120-1/Datasets/segmentation/Cityscapes/gtFine_trainvaltest/gtFine/train/aachen/aachen_000012_000019_gtFine_labelTrainIds.png'
+    semantic_label_path = image_path.replace('/leftImg8bit_trainvaltest/leftImg8bit/', '/gtFine_trainvaltest/gtFine/').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+    semantic_image = cv2.imread(semantic_label_path, cv2.IMREAD_GRAYSCALE)
+    pred_masks = instances.pred_masks  # Tensor of shape [N, H, W]
+    pred_classes = instances.pred_classes  # Tensor of shape [N]
+    remap_dict = {11: 0, 12: 1, 13: 2, 14: 3, 15: 4, 16: 5, 17: 6, 18: 7 }
+    # print('init time : ', time.time() - s)
+    # 遍历每个实例
+    collect_class_correct_pair = []
+    for idx in range(len(instances)):
+        pred_mask = pred_masks[idx].bool().numpy() # Tensor of shape [H, W]
+        # 将mask转换为numpy数组
+        # pred_mask_np = pred_mask.cpu().numpy().astype(np.uint8)  # 值为0或1
+        masked_values = semantic_image[pred_mask]
+        top_three_values = Counter(masked_values).most_common(3)
+        
+        for k, v in top_three_values:
+            if k in remap_dict:
+                if pred_classes[idx] != remap_dict[k]:
+                    print('change class from ', pred_classes[idx], ' to ', remap_dict[k])
+                    collect_class_correct_pair.append((pred_classes[idx], remap_dict[k]))
+                    pred_classes[idx] = remap_dict[k]
+                break
+    return instances, collect_class_correct_pair
+
+def remove_empty_instance_by_GT(instances, image_path):
+    ''' correct instance result according to semantic GT '''
+    # image_path='/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val/frankfurt/frankfurt_000000_000294_leftImg8bit.png'
+    # semantic='/datafast/120-1/Datasets/segmentation/Cityscapes/gtFine_trainvaltest/gtFine/train/aachen/aachen_000012_000019_gtFine_labelTrainIds.png'
+    semantic_label_path = image_path.replace('/leftImg8bit_trainvaltest/leftImg8bit/', '/gtFine_trainvaltest/gtFine/').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+    semantic_image = cv2.imread(semantic_label_path, cv2.IMREAD_GRAYSCALE)
+    if semantic_image is None:
+        raise FileNotFoundError(f"Semantic label file not found: {semantic_label_path}")
+    pred_masks = instances.pred_masks  # Tensor of shape [N, H, W]
+    num_instances = len(instances)
+    keep = torch.ones(num_instances, dtype=torch.bool)
+    # 遍历每个实例
+    count_zero = 0
+    for idx in range(len(instances)):
+        pred_mask = pred_masks[idx].bool().numpy() # Tensor of shape [H, W]
+        keep_flag = True
+        # 将mask转换为numpy数组
+        # pred_mask_np = pred_mask.cpu().numpy().astype(np.uint8)  # 值为0或1
+        masked_values = semantic_image[pred_mask]
+        
+        top_two_values = Counter(masked_values).most_common(2)
+        if len(top_two_values) == 0:
+            keep_flag = False
+            count_zero += 1
+        keep[idx] = keep_flag
+    instances = instances[keep]
+    print('remove empty instances : ', num_instances - len(instances), ' , zero label instances : ', count_zero)
+    return instances
+
+
+def keep_stuff_label_instance_by_GT(instances, image_path):
+    ''' correct instance result according to semantic GT '''
+    # image_path='/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val/frankfurt/frankfurt_000000_000294_leftImg8bit.png'
+    # semantic='/datafast/120-1/Datasets/segmentation/Cityscapes/gtFine_trainvaltest/gtFine/train/aachen/aachen_000012_000019_gtFine_labelTrainIds.png'
+    semantic_label_path = image_path.replace('/leftImg8bit_trainvaltest/leftImg8bit/', '/gtFine_trainvaltest/gtFine/').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+    semantic_image = cv2.imread(semantic_label_path, cv2.IMREAD_GRAYSCALE)
+    if semantic_image is None:
+        raise FileNotFoundError(f"Semantic label file not found: {semantic_label_path}")
+    pred_masks = instances.pred_masks  # Tensor of shape [N, H, W]
+    pred_classes = instances.pred_classes  # Tensor of shape [N]
+    remap_dict = {11, 12, 13, 14, 15, 16, 17, 18 }
+    num_instances = len(instances)
+    keep = torch.ones(num_instances, dtype=torch.bool)
+    # 遍历每个实例
+    count_zero = 0
+    for idx in range(len(instances)):
+        pred_mask = pred_masks[idx].bool().numpy() # Tensor of shape [H, W]
+        keep_flag = True
+        # 将mask转换为numpy数组
+        # pred_mask_np = pred_mask.cpu().numpy().astype(np.uint8)  # 值为0或1
+        masked_values = semantic_image[pred_mask]
+        top_two_values = Counter(masked_values).most_common(2)
+        for k, v in top_two_values:
+            if k in remap_dict:
+                keep_flag = False
+                break
+        keep[idx] = keep_flag
+    instances = instances[keep]
+    print('keep stuff  label instances : ', num_instances - len(instances))
+    return instances
+
+
+
+def remove_wrong_label_instance_by_GT(instances, image_path):
+    ''' correct instance result according to semantic GT '''
+    # image_path='/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val/frankfurt/frankfurt_000000_000294_leftImg8bit.png'
+    # semantic='/datafast/120-1/Datasets/segmentation/Cityscapes/gtFine_trainvaltest/gtFine/train/aachen/aachen_000012_000019_gtFine_labelTrainIds.png'
+    semantic_label_path = image_path.replace('/leftImg8bit_trainvaltest/leftImg8bit/', '/gtFine_trainvaltest/gtFine/').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+    semantic_image = cv2.imread(semantic_label_path, cv2.IMREAD_GRAYSCALE)
+    if semantic_image is None:
+        raise FileNotFoundError(f"Semantic label file not found: {semantic_label_path}")
+    pred_masks = instances.pred_masks  # Tensor of shape [N, H, W]
+    pred_classes = instances.pred_classes  # Tensor of shape [N]
+    # remap_dict = {11, 12, 13, 14, 15, 16, 17, 18 }
+    num_instances = len(instances)
+    keep = torch.ones(num_instances, dtype=torch.bool)
+    # 遍历每个实例
+    count_zero = 0
+    for idx in range(len(instances)):
+        pred_mask = pred_masks[idx].bool().numpy() # Tensor of shape [H, W]
+        masked_values = semantic_image[pred_mask]
+        top_two_values = Counter(masked_values).most_common(1)
+        if len(top_two_values) == 0:
+            count_zero += 1
+            keep[idx] = False
+            continue
+        # print('top_two_values : ', top_two_values)
+        for k, v in top_two_values:
+            if k<11 or k>18:
+                keep[idx] = False
+                print('remove ', k,v)
+                break
+    instances = instances[keep]
+    print('remove wrong label instances : ', num_instances - len(instances), ' , zero label instances : ', count_zero)
+    return instances
+
+def remap_clip_class_2cityscapes(clip_class):
+    ''' remap clip class to cityscapes class'''    
+    if clip_class in ["Pedestrian", "walking people", "people"]:
+        return "person"
+    elif clip_class in ["rider", "riding people", "biker", "motorcyclist", "cyclist"]:
+        return "rider"
+    elif clip_class in ["car", "sedan", "a van truck", "wagon", "hatchback", "coupe", "convertible", "SUV", "crossover", "minivan", "MPV"]:
+        return "car"
+    elif clip_class in ["truck", "a box truck", "Tractor Truck", "Trailer Truck", "Pickup Truck", "Semi-trailer Truck", 
+                        "Dump Truck", "Garbage Truck", "Fire Truck", "Tanker Truck", "Concrete Mixer Truck", "Refrigerator Truck", 
+                        "Logging Truck", "Car Carrier Truck", "Flatbed Truck"]:
+        return "truck"
+    elif clip_class in ["bus", "public transport bus", "school bus", "minibus", "Ambulance", "trolley bus", "double-decker bus", "articulated bus", 
+                        "shuttle bus", "tour bus", "party bus", "sightseeing bus", "airport bus", "intercity bus"]:
+        return "bus"
+    elif clip_class in ["train", "Tram","Metro",]:
+        return "train"                      
+    elif clip_class in ["Standard Motorcycle", "Scooter", "Moped", "Trike", "Chopper", "Bobber", "Cafe Racer", "Streetfighter",  "Motocross Bike", 
+                        "Supermoto Bike", "a part of Motorcycle"]:
+        return "motorcycle"
+    elif clip_class in ["Road Bike", "Mountain Bike", "a part of bike wheel"]:
+        return "bicycle"
+        
+        
+def sum_probs_for_category(clip_probs, clip_text_prompt, group_names):
+    # 计算每组类别的概率总和
+    group_probs_sum = {}
+    for group, names in group_names.items():
+        indices = [clip_text_prompt.index(name) for name in names]
+        indices_tensor = torch.tensor(indices, device=clip_probs.device)
+        group_probs_sum[group] = torch.sum(clip_probs[0, indices_tensor]).item()
+    max_key = max(group_probs_sum, key=group_probs_sum.get)
+    return max_key
+    
+    
+def correct_label_by_CLIP(instances, input_image, imagepath=None, map_save_folder=None, debug_vis=False): # TODO， init once; model_clip, preprocess_clip, text_inputs
+    ''' 
+    instances : Instances
+    input_image : tensor, 3, h, w
+    '''
+    # s = time.time()
+    # 加载CLIP模型
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model_clip, preprocess_clip = clip.load("ViT-B/32", device=device)
+
+    # 定义文本标签
+    CITYSCAPES_THING_CLASSES = ["person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle",]
+    
+    group_names = {
+    "person": [ "walking people", "people"],
+    "rider": ["rider", "riding people", "biker", "motorcyclist", "cyclist"],
+    "car": ["car", "sedan", "wagon", "hatchback", "coupe", "convertible", "SUV", "crossover", "minivan", "MPV", "Ambulance", "a van"],
+    "truck": ["truck",  "Tractor Truck", "Trailer Truck", "Pickup Truck", "Semi-trailer Truck", "a box truck",
+                "Dump Truck", "Garbage Truck", "Fire Truck",  "Tanker Truck", "Concrete Mixer Truck", "Refrigerator Truck", 
+                "Logging Truck", "Car Carrier Truck", "Flatbed Truck"],
+    "bus": ["bus", "public transport bus", "school bus", "trolley bus", "double-decker bus", "articulated bus", 
+            "shuttle bus", "tour bus", "sightseeing bus", "airport bus", "intercity bus"],
+    "train": ["train", "Tram", "Metro"],
+    "motorcycle": ["Standard Motorcycle", "Scooter", "Moped", "Trike", "Chopper", "Bobber", "Cafe Racer", 
+                    "Streetfighter", "Motocross Bike", "Supermoto Bike","motorcycle"],
+    "bicycle": ["Road Bike", "Mountain Bike", "a part of bike"],
+    "stuff": ["object",],
+    "envionment": ["road", "building", "sky", "tree", "grass", "sidewalk"]
+    }
+    clip_text_prompt = []
+    for group, names in group_names.items():
+        clip_text_prompt.extend(names)
+    # CITYSCAPES_STUFF_CLASSES = [
+    #     "road", "sidewalk", "building", "wall", "fence", "pole", "traffic light",
+    #     "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car",
+    #     "truck", "bus", "train", "motorcycle", "bicycle"]
+    text_inputs = clip.tokenize(clip_text_prompt).to(device)
+    
+    class_scores = instances.class_scores  # Tensor of shape [N]
+    mask_scores = instances.mask_scores  # Tensor of shape [N]
+    # scores = instances.scores  # Tensor of shape [N]
+    scores_8s = instances.scores_8  # Tensor of shape [N]
+    pred_masks = instances.pred_masks  # Tensor of shape [N, H, W]
+    pred_classes = instances.pred_classes  # Tensor of shape [N]
+    # print('init time : ', time.time() - s)
+    # 遍历每个实例
+    keep = torch.ones(len(instances), dtype=torch.bool)
+    for idx in range(len(instances)):
+        # class_score = class_scores[idx]
+        pred_mask = pred_masks[idx]  # Tensor of shape [H, W]
+        # 将mask转换为numpy数组
+        pred_mask_np = pred_mask.cpu().numpy().astype(np.uint8)  # 值为0或1
+        # 定义形态学操作的核
+        kernel = np.ones((3, 3), np.uint8)
+
+        # 进行形态学腐蚀处理
+        eroded_mask = cv2.erode(pred_mask_np, kernel, iterations=1)
+
+        # 可选：去掉小点
+        # 你可以使用形态学开运算（先腐蚀后膨胀）来去掉小点
+        pred_mask_np = cv2.morphologyEx(eroded_mask, cv2.MORPH_OPEN, kernel)
+
+
+        # 找到mask的非零区域，计算边界框
+        coords = np.column_stack(np.where(pred_mask_np > 0))
+        if coords.size == 0:
+            continue  # 如果掩码为空，跳过
+        y_min, x_min = coords.min(axis=0)
+        y_max, x_max = coords.max(axis=0)
+
+        # 在原始图像和掩码上裁剪边界框区域
+        
+        if isinstance(input_image, torch.Tensor):
+            image_np = input_image.permute(1, 2, 0).cpu().numpy()
+        else:
+            image_np = input_image
+        image_np = image_np.astype(np.uint8)
+
+        cropped_image = image_np[y_min:y_max+1, x_min:x_max+1]
+        cropped_mask = pred_mask_np[y_min:y_max+1, x_min:x_max+1]
+        ''' only update object of size > 10000'''
+        if cropped_mask.sum() < 5000:
+            continue
+        if cropped_mask.sum() / (cropped_image.size/3) < 0.8:
+            continue
+
+        # 应用掩码到裁剪后的图像上
+        cropped_mask_3d = cropped_mask[:, :, np.newaxis]
+        masked_image_array = cropped_image * cropped_mask_3d
+
+        # 将结果转换回PIL图像
+        masked_image = Image.fromarray(masked_image_array.astype('uint8'))
+        cropped_image = Image.fromarray(cropped_image.astype('uint8'))
+
+        # 对图像进行CLIP预处理
+        image_input = preprocess_clip(cropped_image).unsqueeze(0).to(device)
+        # 计算图像和文本的特征
+        with torch.no_grad():
+            # image_features = model_clip.encode_image(image_input)
+            # text_features = model_clip.encode_text(text_inputs)
+
+            # 计算相似度
+            logits_per_image, _ = model_clip(image_input, text_inputs)
+
+            probs = logits_per_image.softmax(dim=-1).cpu()
+            # clip_var = np.var(probs)
+
+        # 获取预测的类别
+        clip_predicted_class = clip_text_prompt[torch.argmax(probs).item()]
+        # predicted_class = remap_clip_class_2cityscapes(clip_predicted_class)
+        predicted_class = sum_probs_for_category(probs, clip_text_prompt, group_names)
+
+        ''' generate bar chart for the probs'''
+        if imagepath:
+            image_name = imagepath.split('/')[-1]
+        else:
+            image_name = '.png'
+        save_name = map_save_folder + '/' + image_name
+        
+        if debug_vis:
+            bar_chart_probs(clip_text_prompt, probs[0], save_name.replace('.png', '_clip.png'))
+            bar_chart_probs(CITYSCAPES_THING_CLASSES, scores_8s[idx], save_name.replace('.png', '_m2f.png'))
+        
+        ''' combine CLIP with mask2former result, 
+        if m2f output score<thre and clip is confident, use clip, 
+        then if clip output is beyond CITYSCAPES_THING_CLASSES, make m2f score low. 
+        while if in CITYSCAPES_THING_CLASSES, use clip result and update class and score of m2f '''
+        # update_class_label, update_class_score = combine_clip_m2f_result(probs, scores_8s[idx])
+        # clip_result = [torch.argmax(probs), probs.max().item(), probs]
+        # m2f_result = [pred_classes[idx], class_score.item(), scores_8s[idx]]
+        
+        m2f_result_class = CITYSCAPES_THING_CLASSES[pred_classes[idx]]
+        if m2f_result_class == predicted_class:
+            class_scores[idx] = 1.0
+        elif  m2f_result_class!= predicted_class and predicted_class not in ['stuff', 'envionment']:
+            # print('CLIP, ', predicted_class, 'm2f, ', m2f_result_class, imagepath)
+            update_class_label = torch.tensor(CITYSCAPES_THING_CLASSES.index(predicted_class))
+            pred_classes[idx] = update_class_label
+        elif predicted_class in ['stuff', 'envionment']:
+            keep[idx] = False
+        
+        if debug_vis:
+            image_name_pre = image_name.split('.')[0]
+            save_name = map_save_folder + '/' + image_name_pre + '_m2f-' + m2f_result_class + '-map-' + predicted_class + '_clip-' + clip_predicted_class + '.jpg'
+            cropped_image.save(save_name)
+            masked_image.save(save_name.replace('.jpg', '_mask.jpg'))
+        #TODO if predicted_class  in ['stuff', 'envionment'], remove
+            
+            
+        # if CITYSCAPES_THING_CLASSES[pred_classes[idx]] in ['person', 'rider'] or CITYSCAPES_THING_CLASSES[clip_result[0]] in ['person', 'rider']:
+        #     continue
+        
+        # # ''' 1. first update class score, 2. to think about updating the mask score'''
+        # update_class_label, update_class_score, update_class = refine_class_combine_clip_m2f(clip_result, m2f_result)
+        # if CITYSCAPES_THING_CLASSES[pred_classes[idx]] !=  CITYSCAPES_THING_CLASSES[update_class_label]:
+        #     print(f"CLIP,  {probs.max():.2f}, {predicted_class},  m2f, {class_score.item():.2f}, {CITYSCAPES_THING_CLASSES[pred_classes[idx]]}")
+        #     print(f"update class from {CITYSCAPES_THING_CLASSES[pred_classes[idx]]} to {CITYSCAPES_THING_CLASSES[update_class_label]}")
+        #     save_name = 'output/clip_class_refine/update_size_' + str(int(cropped_mask.sum())) + '-' + CITYSCAPES_THING_CLASSES[pred_classes[idx]] + '-to-' + CITYSCAPES_THING_CLASSES[update_class_label] + '.png'
+        #     cropped_image.save(save_name)
+        #     # masked_image.save(save_name.replace('.png', '_mask.png'))
+            
+        # # update class name and class score
+        # # update_class_label_index = CITYSCAPES_THING_CLASSES.index(update_class_label)
+
+
+    # after update each instance class and score, update the total scores
+    instances.scores = class_scores*mask_scores
+    
+    instances = instances[keep]
+    #TODO remove small instance with keep mask
+    return instances

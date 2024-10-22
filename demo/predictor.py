@@ -94,7 +94,7 @@ class VisualizationDemo(object):
                 )
             if "instances" in predictions:
                 instances = predictions["instances"].to(self.cpu_device)
-                instances = instances[instances.scores.cpu() > 0.85] # cinyd add/
+                # instances = instances[instances.scores.cpu() > 0.85] # cinyd add/
                 vis_output = visualizer.draw_instance_predictions(predictions=instances)
 
         return predictions, vis_output, visualizer
