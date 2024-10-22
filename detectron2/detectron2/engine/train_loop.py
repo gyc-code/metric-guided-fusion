@@ -19,14 +19,16 @@ import detectron2.utils.comm as comm
 from detectron2.utils.events import EventStorage, get_event_storage
 from detectron2.utils.logger import _log_api_usage
 import cv2
+from detectron2.structures import Instances, Boxes
+import torch.nn.functional as F
 
-from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix, remove_ego_car_logo, break_source_target_match, visulize_color_instances
+from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix,\
+remove_ego_car_logo, break_source_target_match, visulize_color_instances, correct_label_by_CLIP
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
-TOTAL_LOSS = True
 
 VISUL = False
-ITERATION_TO_START_UDA = 10000
+ITERATION_TO_START_UDA = 0
 MINI_BATCH_LOSS = True
 
 class HookBase:
@@ -497,7 +499,7 @@ class AMPTrainer(SimpleTrainer):
         self.alpha = 0.999
         timestamp = time.time()
         human_readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d-%H:%M:%S')
-        self.folder_name = './debug_in_img_' + human_readable_time+ '/'
+        self.folder_name = './output/debug_in_img_' + human_readable_time+ '/'
         # if not os.path.exists(self.folder_name):
         #     # shutil.rmtree(folder_name)
         #     os.makedirs(self.folder_name)
@@ -507,6 +509,55 @@ class AMPTrainer(SimpleTrainer):
 
     def _init_ema_weights(self):
         self.ema_model = copy.deepcopy(self.model).eval() # init , no weight load
+
+
+    # def filter_instances(self, mask_input, rough_ins, crop_info, threshold=0.9):
+    #     ''' filter out the instances which has high IOU with rough_ins'''
+    #     def calculate_iou(mask1, mask2):
+    #         mask1 = mask1.bool()
+    #         mask2 = mask2.bool()
+    #         intersection = torch.sum((mask1 & mask2).float())
+    #         union = torch.sum((mask1 | mask2).float())
+    #         iou = intersection / union
+    #         return iou.item()
+
+    #     x0, y0, x1, y1 = crop_info
+    #     iou_list = []
+    #     for i in range(len(rough_ins)):
+    #         rough_ins_mask = rough_ins[i].pred_masks
+    #         crop_rough_ins_mask = rough_ins_mask[0, y0:y1, x0:x1]
+    #         if torch.sum(crop_rough_ins_mask).item() < 1:
+    #             continue
+    #         iou = calculate_iou(mask_input, crop_rough_ins_mask)
+    #         iou_list.append(iou)
+    #         if iou > threshold:
+    #             return False
+    #     return True
+
+    def __print_label__(self, instances, image, save_path):
+        image_copy = copy.deepcopy(image.permute(1,2,0).numpy().astype(np.uint8))
+        cv2.imwrite(save_path, image_copy)
+        image_read = cv2.imread(save_path)
+
+        pred_masks = instances.pred_masks
+        scores = instances.scores
+        pred_classes = instances.pred_classes
+        for i, pred_mask in enumerate(pred_masks):
+            score = scores[i].item()
+            class_id = pred_classes[i].item()
+            text = f"s{score:.2f}|c{class_id}"
+            # 获取 pred_mask 的右上角位置
+            mask_np = pred_mask.cpu().numpy()
+            non_zero_indices = torch.nonzero(pred_mask)
+            if len(non_zero_indices) == 0:
+                continue
+            y_min, x_min = non_zero_indices.min(dim=0)[0]
+            y_max, x_max = non_zero_indices.max(dim=0)[0]
+            y_center = int((y_min + y_max) // 2)
+            x_center = int((x_min + x_max) // 2)
+            image_text = cv2.putText(image_read, text, (x_center, y_center), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+        cv2.imwrite(save_path, image_text)
+
 
     def _update_ema(self, iter):
         alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
@@ -526,7 +577,105 @@ class AMPTrainer(SimpleTrainer):
         with torch.no_grad():
             for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
                 ema_param.data.mul_(alpha_teacher).add_(param.data, alpha=1 - alpha_teacher)
-                    
+
+
+    # def second_pseudo_labels_far_region(self, data, pseudo_labels, index):
+    #     ''' use far region image to generate pseudo label for far region'''
+    #     data_copy_plabel_i = copy.deepcopy(data[index])
+    #     if len(data[index]['target']['crop_information']) > 0:
+    #         '''  try use far image crop to get pseudo label ,
+    #         far crop image 500*200, resize to 2 times to inference, get plabel and
+    #         resize the instance pred_mask to 600*200, paste to the original image shape according crop imformation(x0 y0 x1 y1)'''
+    #         target = data[index]['target']
+    #         # 1. 获取 far_region_image
+    #         far_region_image = target['far_region_image']
+    #         # 2. 将图片放大两倍
+    #         far_region_image = far_region_image.float()
+    #         enlarged_image = F.interpolate(far_region_image.unsqueeze(0), scale_factor=2, mode='bilinear', align_corners=False).squeeze(0)
+    #         file_id = data[index]['target']['image_id'].split('.')[0]
+    #         # 3. 送进 self.ema_model 进行推理
+    #         data_copy_plabel_i['target']['image'] = enlarged_image
+    #         pseudo_labels_second = self.ema_model([data_copy_plabel_i], target=True) #cindy, image size change due to size_divisibility(32)
+    #         # 4. 修改输出结果中的 instance 的 image_height 和 image_width
+    #         pseudo_labels_second_instance = pseudo_labels_second[0]['instances']
+    #         pseudo_labels_second_instance = pseudo_labels_second_instance[pseudo_labels_second_instance.scores.cpu() > 0.8]
+    #         # save_path = self.folder_name + file_id + '_' + str(self.local_iter)+ '_enlarge_image.jpg'
+    #         # # cv2.imwrite(save_path.replace('_enlarge_image.jpg', '_tar_ori.jpg'), enlarged_image.permute(1,2,0).numpy())
+    #         # self.__print_label__(pseudo_labels_second_instance, enlarged_image, save_path)
+
+    #         # 5. 将 instance 的 pred_masks resize 且 pad 回原图
+    #         if len(pseudo_labels_second_instance) > 0:
+    #             pred_masks = pseudo_labels_second_instance.pred_masks
+    #             resized_pred_masks = F.interpolate(pred_masks.unsqueeze(1).float(), size=(far_region_image.shape[1], far_region_image.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
+    #             # 6. 创建空白的 mask，并根据 crop_information 放回对应位置
+    #             crop_info = target['crop_information']
+    #             x0, y0, x1, y1 = crop_info
+    #             final_masks = []
+    #             final_scores = []
+    #             final_classes = []
+    #             for j, resized_pred_mask in enumerate(resized_pred_masks):
+    #                 mask_tmp = torch.zeros((target['image'].shape[1], target['image'].shape[2]), dtype=resized_pred_mask.dtype)
+    #                 keep = self.filter_instances(resized_pred_mask, pseudo_labels[index]['instances'], crop_info, 0.75)
+    #                 if keep is False:
+    #                     continue
+    #                 # 确保 resized_pred_mask 的大小与 crop_info 一致
+    #                 if resized_pred_mask.shape[0] != (y1 - y0) or resized_pred_mask.shape[1] != (x1 - x0):
+    #                     print(f"Error: resized_pred_mask size {resized_pred_mask.shape} does not match crop_info size {(y1 - y0, x1 - x0)}")
+    #                     continue
+    #                 mask_tmp[y0:y1, x0:x1] = resized_pred_mask
+    #                 final_masks.append(mask_tmp)
+    #                 final_scores.append(pseudo_labels_second_instance.scores[j].item())
+    #                 final_classes.append(pseudo_labels_second_instance.pred_classes[j].item())
+
+    #             # 7. 更新 output 中的 pred_masks
+
+    #             if len(final_masks) > 0:
+    #                 final_masks = torch.stack(final_masks).cuda()
+    #                 final_scores = torch.tensor(final_scores).cuda()
+    #                 final_classes = torch.tensor(final_classes).cuda()
+    #                 boxes = torch.tensor(np.zeros((len(final_masks), 4)))
+    #                 ct, ht, wt = data[index]['target']['image'].shape
+    #                 second_ins = Instances((ht, wt))
+    #                 second_ins.pred_classes = final_classes
+    #                 second_ins.pred_masks = final_masks
+    #                 second_ins.scores = final_scores
+    #                 second_ins.pred_boxes = Boxes(boxes)
+    #                 return second_ins
+    #             else:
+    #                 return None
+    #         else:
+    #             return None
+    #     else:
+    #         return None
+
+    # def second_pseudo_labels_mask_out(self, data, index):
+    #     ''' use imag with masking out the object detected in the first time to generate pseudo label again '''
+    #     data_copy_plabel = copy.deepcopy(data)
+    #     mask = np.zeros(template_img.shape[1:], dtype=bool)
+    #     # Iterate over the instance masks and update the mask
+    #     for instance_mask in pseudo_labels[index]['instances'].pred_masks:
+    #         binary_mask = (instance_mask.cpu().numpy().astype(np.uint8)) * 255
+    #         contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #         bounding_boxes = [cv2.boundingRect(contour) for contour in contours]
+    #         mask_trans = np.zeros(binary_mask.shape, dtype=np.uint8)
+    #         # 在每个矩形框区域内填充白色
+    #         for bbox in bounding_boxes:
+    #             x, y, w, h = bbox
+    #             mask_trans[y:y+h, x:x+w] = 255
+    #         mask = np.logical_or(mask, mask_trans)
+    #     cv2.imwrite(self.folder_name + data[i]['target']['image_id'].split('.')[0] + '_mask.jpg', mask.astype(np.uint8) * 255)
+    #     original_image = data[index]['target']['image']
+    #     image_copy = copy.deepcopy(original_image)
+    #     mask_tensor = torch.from_numpy(mask).unsqueeze(0)  # 形状变为 (1, H, W)
+    #     mask_tensor = mask_tensor.expand_as(image_copy)  # 形状变为 (C, H, W)
+    #     image_copy[mask_tensor] = 0  # 将 mask 为 True 的区域变成黑色
+    #     cv2.imwrite(self.folder_name + data[i]['target']['image_id'].split('.')[0] + '_mask_image.jpg', image_copy.permute(1,2,0).numpy())
+    #     data_copy_plabel[index]['target']['image'] = image_copy
+    #     pseudo_labels_second = self.ema_model([data_copy_plabel[index]], target=True) 
+    #     pseudo_labels_second_instance = pseudo_labels_second[0]['instances']
+    #     pseudo_labels_second_instance = pseudo_labels_second_instance[pseudo_labels_second_instance.scores.cpu() > 0.9]
+    #     return pseudo_labels_second_instance
+
     def run_step(self):
         """
         Implement the AMP training logic.
@@ -534,12 +683,10 @@ class AMPTrainer(SimpleTrainer):
         assert self.model.training, "[AMPTrainer] model was changed to eval mode!"
         assert torch.cuda.is_available(), "[AMPTrainer] CUDA is required for AMP training!"
         from torch.cuda.amp import autocast
-
         start = time.perf_counter()
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
         self.local_iter += 1
-
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             batch_size = len(data)
             # cindy: shuffle source-target match in a batch
@@ -573,9 +720,43 @@ class AMPTrainer(SimpleTrainer):
                 pseudo_instances_num_list = []
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
+
                     pseudo_instances = pseudo_labels[i]['instances']
+                    '''if the score(=class*mask)>0.5,I want to correct the score by CLIP, the class score will be updated by 
+                    CLIP output,and then update the score of the instance'''
+                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.5]
+                    correct_label_by_CLIP(pseudo_labels[i]['instances'], data[i]['target']['image'])
+
+
+                    pseudo_instances.remove('class_scores')
+                    pseudo_instances.remove('mask_scores')
+                    pseudo_instances.remove('scores_8')
+
+                    # pseudo_instances.scores = pseudo_instances.class_scores * pseudo_instances.mask_scores
                     pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
-                    update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
+
+                    if VISUL:
+                        file_id = data[i]['target']['image_id'].split('.')[0]
+                        save_path = self.folder_name + file_id + '_' + str(self.local_iter)+ '_tar.jpg'
+                        self.__print_label__(pseudo_instances, data[i]['target']['image'], save_path)
+                        save_path_1 = self.folder_name + file_id + '_' + str(self.local_iter)+ '_template.jpg'
+                        cv2.imwrite(save_path_1, template_img.permute(1,2,0).numpy().astype(np.uint8))
+
+
+                    '''Add pseudo label mask to filter out the object in image and
+                    do the inference again to get second p label, fuse two p label  -> only get back 1-2 instances'''
+                    ##### Initialize a boolean mask of the same size as the template image
+                    # second_instances = self.second_pseudo_labels_mask_out(data, i)
+                    # second_instances = self.second_pseudo_labels_far_region(data, pseudo_labels, i)
+                    second_instances = None
+
+                    if second_instances is not None:
+                        fuse_instance = Instances.cat([second_instances, pseudo_labels[i]['instances']])
+                        # fuse_instance = second_instances
+                    else:
+                        fuse_instance = pseudo_labels[i]['instances']
+                    #############################################
+                    update_pseudo_label = remove_ego_car_logo(fuse_instance, template_img)
                     if update_pseudo_label is None:
                         pseudo_instances_num_list.append(0)
                         continue
@@ -587,7 +768,7 @@ class AMPTrainer(SimpleTrainer):
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
-                data_ori = copy.deepcopy(data[0])
+                data_ori_0 = copy.deepcopy(data[0])
                 data_copy = copy.deepcopy(data)
                 if VISUL:
                     self.model.training = False
@@ -652,17 +833,17 @@ class AMPTrainer(SimpleTrainer):
                     # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
                     # unite_loss = s2t_mix_losses # ablation
                     # unite_loss = t2s_mix_losses # ablation
-                    unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
-                    # unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
+                    # unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
+                    unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
                     # unite_loss = t2s_mix_losses
                     unite_loss_dict = t2s_mix_loss_dict
                 else:
-                    ''' use mini batch loss ,one batch data=source+s2t+t2s ''' 
+                    ''' use mini batch loss ,one batch data=source+s2t+t2s '''
                     self.optimizer.zero_grad()
                     self.model.training = True
                     assert batch_size % 3 == 0, f"Batch size must be a multiple of 3, but got {batch_size}"
                     if batch_size == 3:
-                        data[0] = data_ori
+                        data[0] = data_ori_0
                         # data[1] = data[1]
                         data[2] = data_copy[2]
                     with autocast(dtype=self.precision):
@@ -686,13 +867,12 @@ class AMPTrainer(SimpleTrainer):
                 storage = get_event_storage()
                 storage.put_scalar("[metric]grad_scaler", self.grad_scaler.get_scale())
             self.after_backward()
-
-
         else:
             if 'source' in data[0]: # when local_iter < ITERATION_TO_START_UDA, also use only source training
                 data = [x['source'] for x in data]
-                if random.randint(0, 1): # make the source only train using somethimes with far_away_image TODO: see improve far object instance  or not ?
-                    for x in data:
+                for x in data:
+                    if 0:
+                    # if random.randint(0, 1):
                         x['image'] = x['far_region_image']
                         x['instances'] = x['far_region_instances']
 
