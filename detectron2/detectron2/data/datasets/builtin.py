@@ -183,6 +183,17 @@ _RAW_CITYSCAPES_SPLITS = {
     "urbansyn_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
     "urbansyn_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
 
+    "urbansyn_category_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+    "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+    "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),
+    "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),   
+
+
+
+    # "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_small.txt", "urbansyn_total_label/label_urbansyn_instance_small.txt"),
+    # "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_small.txt", "urbansyn_total_label/label_urbansyn_instance_small.txt"),   
+        
+
     # "synscapes_human_cycle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
     # "synscapes_vehicle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
 
@@ -258,6 +269,8 @@ _RAW_UDA_CITYSCAPES_SPLITS = {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
         # 'source':("img_3time_urban_synscapes_instance.txt", "label_3time_urban_synscapes_instance.txt"), 
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        # 'target':("cityscapes/leftimage8bit_train_small.txt", "cityscapes/gtFine_train_small.txt")
+
         },
     "uda_syn_real_human_cycle_{task}_train": {
         # 'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
