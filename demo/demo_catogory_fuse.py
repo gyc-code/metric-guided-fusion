@@ -41,7 +41,7 @@ from detectron2.data import MetadataCatalog
 from cityscapesscripts.helpers.labels import name2label
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 # constants
 WINDOW_NAME = "mask2former demo"
@@ -80,13 +80,13 @@ def get_parser():
         nargs="+",
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
         # default=['/home/yguo/Documents/other/Mask2Former/danna_visual'],
-        default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
+        default=['datasets/urbansyn_total_label/img_urbansyn_instance_category_val.txt'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/uda_urbansyn',
+        default='visual_instance/category/category_urbansyn_1-',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -101,12 +101,9 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl'],
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
+        # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
-        # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
-        
-        # default=['MODEL.WEIGHTS','./output/urabn_1024_human_cycle_bs3from_coco/model_best.pth ./output/urabn_1024_human_cycle_bs3from_coco/model_best.pth'],
-
+        default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_0039999.pth ./output/category/urbansyn_vehicle/model_0039999.pth'],
         nargs=argparse.REMAINDER,
     )
     return parser
@@ -192,87 +189,79 @@ def cat_pred_gt(visual_pred_color, mask_vis_output, file_name):
 
 def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, error_map_save_folder, target):
     # use PIL, to be consistent with evaluation
+    print(path)
     path = str(path)
     # print('path of img is : ', path)
     img = read_image(path, format="BGR")
     img_copy = copy.deepcopy(img)
     out_filename = os.path.join(visul_save_folder, os.path.basename(path))
-
     predictions_human_cycle, visualized_output_human_cycle, visualizer = demo_human_cycle.run_on_image_for_instance(img)
-    # if VISUAL:
-    #     visualized_output_human_cycle.save(out_filename.replace('.png', '_human_cyc.png'))
-
+    if VISUAL:
+        visualized_output_human_cycle.save(out_filename.replace('.png', '_human_cyc.png'))
     predictions_vehicle, visualized_output_vehicle, visualizer = demo_vehicle.run_on_image_for_instance(img_copy)
-    # if VISUAL:
-    #     visualized_output_vehicle.save(out_filename.replace('.png', '_vehicle.png')) 
-
-    # import time 
+    if VISUAL:
+        visualized_output_vehicle.save(out_filename.replace('.png', '_vehicle.png'))
+    # import time
     # s=time.time()
     predictions_fuse = Instances.cat([predictions_human_cycle['instances'], predictions_vehicle['instances']])
     # ss= time.time() - s
     # print('cat time is :',ss)
     cpu_device = torch.device("cpu")
     instances = predictions_fuse.to(cpu_device)
-    instances = instances[instances.scores.cpu() > 0.85]
-    color_pseudo_instances = visulize_color_instances(instances)
-
-    mask_vis_output = visualizer.draw_instance_predictions(predictions=instances)
+    # instances = instances[instances.scores.cpu() > 0.85]
 
     """ save instances for eval """
     predictions_human_cycle = demo_human_cycle.predictor(img)
     predictions_vehicle = demo_vehicle.predictor(img_copy)
-
     file_name = path
     basename = os.path.splitext(os.path.basename(file_name))[0]
+    
     pred_txt = os.path.join(result_save_folder, basename + "_pred.txt")
     visual_pred = 255 * np.ones(img.shape, dtype=np.uint8)
     visual_pred_filename = os.path.join(visul_save_folder, basename + "_visual_pred.png")
-    print(visual_pred_filename)
     error_map_filename = os.path.join(visul_save_folder, basename + "_error_map.png")
+    if VISUAL:
+        mask_vis_output = visualizer.draw_instance_predictions(predictions=instances)
+        color_pseudo_instances_path = os.path.join(visul_save_folder, basename + "_instance.png")
+        color_pseudo_instances = visulize_color_instances(instances)
+        Image.fromarray(color_pseudo_instances).save(color_pseudo_instances_path)
+        mask_vis_output.save(out_filename.replace('.png', '_mask.png'))
+        mask_img = cv2.imread(out_filename.replace('.png', '_mask.png'))
+        # mask_img = cv2.cvtColor(mask_img, cv2.COLOR_BGR2RGB)
 
-    color_pseudo_instances_path = os.path.join(visul_save_folder, basename + "_instance.png")
-    Image.fromarray(color_pseudo_instances).save(color_pseudo_instances_path)
-
-    mask_vis_output.save(out_filename.replace('.png', '_mask.png'))
-    mask_img = cv2.imread(out_filename.replace('.png', '_mask.png'))
-    # mask_img = cv2.cvtColor(mask_img, cv2.COLOR_BGR2RGB)
-
-    if len(instances) != 0:
-        num_instances = len(instances)
-        with open(pred_txt, "w") as fout:
-            for i in range(num_instances):
-                pred_class = instances.pred_classes[i]
-                classes = _metadata.thing_classes[pred_class]
-                class_id = name2label[classes].id
-                class_train_id = name2label[classes].trainId
-                score = instances.scores[i]
-                # mask = instances.pred_masks[i].numpy().astype("uint8")
-                mask = instances.pred_masks[i].bool()
-                true_positions = torch.where(mask)
-                if VISUAL:
-                    if true_positions[0].numel() > 0:
-                        mid_0 = int(0.5*(true_positions[0][-1].item() - true_positions[0][0].item())) + true_positions[0][0].item()
-                        mid_1 = int(0.5*(true_positions[1][-1].item() - true_positions[1][0].item())) + true_positions[1][0].item()
-                        if mid_1 > 1995:
-                            mid_1 = 1995
-                        text_position = (mid_1, mid_0)
-                        cv2.putText(mask_img, classes + str(round(score.item(), 2)), text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
-
-                visual_pred[mask] = class_train_id
-                png_filename = os.path.join(
-                    result_save_folder, basename + "_{}_{}.png".format(i, classes)
-                )
-                # Image.fromarray(instances.pred_masks[i].numpy().astype("uint8") * 255).save(png_filename)
-                # fout.write(
-                #     "{} {} {}\n".format(os.path.basename(png_filename), class_id, score)
-                # )
+    num_instances = len(instances)
+    with open(pred_txt, "w") as fout:
+        for i in range(num_instances):
+            pred_class = instances.pred_classes[i]
+            classes = _metadata.thing_classes[pred_class]
+            class_id = name2label[classes].id
+            class_train_id = name2label[classes].trainId
+            score = instances.scores[i]
+            # mask = instances.pred_masks[i].numpy().astype("uint8")
+            mask = instances.pred_masks[i].bool()
             if VISUAL:
-                visual_semantic_pred_color = process_train_id_to_color_img(visual_pred[:,:,0])
-                # Image.fromarray(visual_pred_color).save(visual_pred_filename)
-                final_img, error_map = cat_pred_gt(visual_semantic_pred_color, mask_img, file_name)
-                # Image.fromarray(final_img.astype("uint8")).save(visual_pred_filename)
-                cv2.imwrite(out_filename.replace('.png', '_mask_text.png'), mask_img)
-                Image.fromarray(error_map.astype("uint8")).save(error_map_filename)
+                true_positions = torch.where(mask)
+                if true_positions[0].numel() > 0:
+                    mid_0 = int(0.5*(true_positions[0][-1].item() - true_positions[0][0].item())) + true_positions[0][0].item()
+                    mid_1 = int(0.5*(true_positions[1][-1].item() - true_positions[1][0].item())) + true_positions[1][0].item()
+                    if mid_1 > 1995:
+                        mid_1 = 1995
+                    text_position = (mid_1, mid_0)
+                    cv2.putText(mask_img, classes + str(round(score.item(), 2)), text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+            visual_pred[mask] = class_train_id
+            png_filename = os.path.join(
+                result_save_folder, basename + "_{}_{}.png".format(i, classes)
+            )
+            Image.fromarray(instances.pred_masks[i].numpy().astype("uint8") * 255).save(png_filename)
+            fout.write("{} {} {}\n".format(os.path.basename(png_filename), class_id, score))
+        if VISUAL:
+            visual_semantic_pred_color = process_train_id_to_color_img(visual_pred[:,:,0])
+            # Image.fromarray(visual_pred_color).save(visual_pred_filename)
+            final_img, error_map = cat_pred_gt(visual_semantic_pred_color, mask_img, file_name)
+            # Image.fromarray(final_img.astype("uint8")).save(visual_pred_filename)
+            cv2.imwrite(out_filename.replace('.png', '_mask_text.png'), mask_img)
+            Image.fromarray(error_map.astype("uint8")).save(error_map_filename)
 
 
 def process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, error_map_save_folder, target):
@@ -306,37 +295,41 @@ if __name__ == "__main__":
 
     result_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_instance_img'
     visul_save_folder = folder +  cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_visul_img'
-    error_map_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_error_map'
+    other_map_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_other_map'
     creat_empty_folder(result_save_folder)
     creat_empty_folder(visul_save_folder)
-    creat_empty_folder(error_map_save_folder)
+    creat_empty_folder(other_map_save_folder)
 
     args_input = args.input
     if len(args_input) == 1:
         if os.path.isdir(args_input[0]):
             inputs = sorted(Path(args_input[0]).glob('*/*.png'))
-            # inputs = sorted(Path(args_input[0]).glob('*.png'))
-
             # final_result = '/home/yguo/Documents/other/detectron2/final_cityscapes_val_result'
 
-
-            # if EVAL:
-            #     city_names = ['frankfurt', 'lindau', 'munster']
-            #     for city in city_names:
-            #             os.mkdir(result_save_folder + os.sep + city)
-
-        
         elif os.path.isfile(args_input[0]):
-            inputs = glob.glob(os.path.expanduser(args_input[0]))
-            assert args_input, "The input path(s) was not found"
+            # inputs = glob.glob(os.path.expanduser(args_input[0]))
+            # 读取文件中的每一行
+            with open(args_input[0], 'r') as file:
+                lines = file.readlines()
 
-    process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, error_map_save_folder, target)
-    # pool = mp.Pool(processes=30)
-    # pool.map(process_one, demo, inputs)
+            # 去掉每行末尾的换行符
+            inputs = [line.strip() for line in lines]
+            
+    process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, other_map_save_folder, target)
+    
+    ''' multi-process '''
+    # _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+    # paramers = []
+    # for i in range(len(inputs)):
+    #     paramers.append((inputs[i], demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, target))
+    # # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
+    # pool = mp.Pool(processes=2)
+    # pool.starmap(process_one, paramers)
+    
     if EVAL:
         # organise_evaluate_folder(result_save_folder)
         # organise_evaluate_folder(visul_save_folder)
-        # os.environ['CITYSCAPES_RESULTS'] = result_save_folder
-        os.environ['CITYSCAPES_RESULTS'] = '/home/yguo/Documents/other/edaps/edaps_experiments/exp-00007/work_dirs/None-exp00007/240303_2145_syn2cs_dacs_rcs001_cpl_maskrcnn_mitb5_poly10warm_s0_aac12/panoptic_eval/panop_eval_03-03-2024_21-45-52-588320/instance'
+        os.environ['CITYSCAPES_RESULTS'] = result_save_folder
+        # os.environ['CITYSCAPES_RESULTS'] = '/home/yguo/Documents/other/edaps/edaps_experiments/exp-00007/work_dirs/None-exp00007/240303_2145_syn2cs_dacs_rcs001_cpl_maskrcnn_mitb5_poly10warm_s0_aac12/panoptic_eval/panop_eval_03-03-2024_21-45-52-588320/instance'
         os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
 
