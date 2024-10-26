@@ -46,8 +46,9 @@ from cityscapesscripts.helpers.labels import name2label
 # constants
 WINDOW_NAME = "mask2former demo"
 
-EVAL=False
-VISUAL = True
+EVAL = True
+VISUAL = False
+ONLY_VAL = False
 
 
 "python demo.py --opts MODEL.WEIGHTS detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl"
@@ -81,12 +82,13 @@ def get_parser():
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
         # default=['/home/yguo/Documents/other/Mask2Former/danna_visual'],
         default=['datasets/urbansyn_total_label/img_urbansyn_instance_category_val.txt'],
+        # default=['datasets/urbansyn_total_label/img_urbansyn_instance_small.txt'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category/category_urbansyn_1-',
+        default='visual_instance/category/category_urbansyn_500_',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -103,7 +105,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_0039999.pth ./output/category/urbansyn_vehicle/model_0039999.pth'],
+        default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_final.pth ./output/category/urbansyn_vehicle/model_final.pth'],
         nargs=argparse.REMAINDER,
     )
     return parser
@@ -153,9 +155,20 @@ def get_error_map(gt_color, visual_pred_color):
 
     return error_map
 
-def cat_pred_gt(visual_pred_color, mask_vis_output, file_name):
-    gt_path = file_name.replace('/leftImg8bit', '/gtFine').replace('_leftImg8bit.png', '_gtFine_color.png')
-    train_id_path = file_name.replace('/leftImg8bit', '/gtFine').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+def cat_pred_gt(visual_pred_color, mask_vis_output, file_name, GT='cityscapes'):
+    if GT== 'cityscapes':
+        gt_path = file_name.replace('/leftImg8bit', '/gtFine').replace('_leftImg8bit.png', '_gtFine_color.png')
+        train_id_path = file_name.replace('/leftImg8bit', '/gtFine').replace('_leftImg8bit.png', '_gtFine_labelTrainIds.png')
+    elif GT == 'urbansyn':
+        # '/home/yguo/Documents/other/detectron2/datasets/urbansyn/poblenou_terrain/rgb_translated_cityscapes/image_scene_013_beauty_0013.png'
+        #/home/yguo/Documents/other/UDA4Inst/datasets/urbansyn_total_label/urbansyn_total_label/poblenou_image_scene_001_objectcolor_0001_gtFine_labelIds.png
+        city_name = file_name.split('/')[-3]
+        image_name = file_name.split('/')[-1].replace('_beauty_', '_objectcolor_').replace('.png', '_gtFine_labelIds.png')
+        train_id_path = './datasets/urbansyn_total_label/urbansyn_total_label/' + city_name + image_name
+        
+        gt_path = None# no color gt for urbansyn
+        train_id_path = file_name.replace('img_urbansyn_instance_category_val', 'label_urbansyn_instance_category_val').replace('.png', '_trainId.png')
+        
     gt_img = cv2.imread(gt_path)
     # rgb_img = cv2.imread(file_name)
     train_id_img = cv2.imread(train_id_path)
@@ -189,7 +202,7 @@ def cat_pred_gt(visual_pred_color, mask_vis_output, file_name):
 
 def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, error_map_save_folder, target):
     # use PIL, to be consistent with evaluation
-    print(path)
+    # print(path)
     path = str(path)
     # print('path of img is : ', path)
     img = read_image(path, format="BGR")
@@ -258,7 +271,7 @@ def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_fol
         if VISUAL:
             visual_semantic_pred_color = process_train_id_to_color_img(visual_pred[:,:,0])
             # Image.fromarray(visual_pred_color).save(visual_pred_filename)
-            final_img, error_map = cat_pred_gt(visual_semantic_pred_color, mask_img, file_name)
+            final_img, error_map = cat_pred_gt(visual_semantic_pred_color, mask_img, file_name, GT='urbansyn')
             # Image.fromarray(final_img.astype("uint8")).save(visual_pred_filename)
             cv2.imwrite(out_filename.replace('.png', '_mask_text.png'), mask_img)
             Image.fromarray(error_map.astype("uint8")).save(error_map_filename)
@@ -271,65 +284,67 @@ def process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visu
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn", force=True)
-    args = get_parser().parse_args()
-    setup_logger(name="fvcore")
-    logger = setup_logger()
-    logger.info("Arguments: " + str(args))
-    '''  input multi model, seperate by ' ', run loop'''
-    args_copy = copy.deepcopy(args)
-    model_weights = args_copy.opts[1].split(' ')
-    model_human_cycle = model_weights[0]
-    model_vehicle = model_weights[1]
+    if not ONLY_VAL:
+        mp.set_start_method("spawn", force=True)
+        args = get_parser().parse_args()
+        setup_logger(name="fvcore")
+        logger = setup_logger()
+        logger.info("Arguments: " + str(args))
+        '''  input multi model, seperate by ' ', run loop'''
+        args_copy = copy.deepcopy(args)
+        model_weights = args_copy.opts[1].split(' ')
+        model_human_cycle = model_weights[0]
+        model_vehicle = model_weights[1]
 
-    args.opts[1] = model_human_cycle
-    cfg = setup_cfg(args)
-    demo_human_cycle = VisualizationDemo(cfg)
+        args.opts[1] = model_human_cycle
+        cfg = setup_cfg(args)
+        demo_human_cycle = VisualizationDemo(cfg)
 
-    args.opts[1] = model_vehicle
-    cfg = setup_cfg(args)
-    demo_vehicle = VisualizationDemo(cfg)
+        args.opts[1] = model_vehicle
+        cfg = setup_cfg(args)
+        demo_vehicle = VisualizationDemo(cfg)
 
-    target = 'human_cycle_vehicle'
-    folder = args.output
+        target = 'human_cycle_vehicle'
+        folder = args.output
 
-    result_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_instance_img'
-    visul_save_folder = folder +  cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_visul_img'
-    other_map_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_other_map'
-    creat_empty_folder(result_save_folder)
-    creat_empty_folder(visul_save_folder)
-    creat_empty_folder(other_map_save_folder)
+        result_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_instance_img'
+        visul_save_folder = folder +  cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_visul_img'
+        other_map_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-1] + '_other_map'
+        creat_empty_folder(result_save_folder)
+        creat_empty_folder(visul_save_folder)
+        creat_empty_folder(other_map_save_folder)
 
-    args_input = args.input
-    if len(args_input) == 1:
-        if os.path.isdir(args_input[0]):
-            inputs = sorted(Path(args_input[0]).glob('*/*.png'))
-            # final_result = '/home/yguo/Documents/other/detectron2/final_cityscapes_val_result'
+        args_input = args.input
+        if len(args_input) == 1:
+            if os.path.isdir(args_input[0]):
+                inputs = sorted(Path(args_input[0]).glob('*/*.png'))
+                # final_result = '/home/yguo/Documents/other/detectron2/final_cityscapes_val_result'
 
-        elif os.path.isfile(args_input[0]):
-            # inputs = glob.glob(os.path.expanduser(args_input[0]))
-            # 读取文件中的每一行
-            with open(args_input[0], 'r') as file:
-                lines = file.readlines()
+            elif os.path.isfile(args_input[0]):
+                # inputs = glob.glob(os.path.expanduser(args_input[0]))
+                # 读取文件中的每一行
+                with open(args_input[0], 'r') as file:
+                    lines = file.readlines()
 
-            # 去掉每行末尾的换行符
-            inputs = [line.strip() for line in lines]
-            
-    process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, other_map_save_folder, target)
-    
-    ''' multi-process '''
-    # _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
-    # paramers = []
-    # for i in range(len(inputs)):
-    #     paramers.append((inputs[i], demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, target))
-    # # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
-    # pool = mp.Pool(processes=2)
-    # pool.starmap(process_one, paramers)
+                # 去掉每行末尾的换行符
+                inputs = [line.strip() for line in lines]
+                
+        # process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, other_map_save_folder, target)
+        
+        ''' multi-process '''
+        _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+        paramers = []
+        for i in range(len(inputs)):
+            paramers.append((inputs[i], demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, target))
+        # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
+        pool = mp.Pool(processes=2)
+        pool.starmap(process_one, paramers)
     
     if EVAL:
         # organise_evaluate_folder(result_save_folder)
         # organise_evaluate_folder(visul_save_folder)
         os.environ['CITYSCAPES_RESULTS'] = result_save_folder
-        # os.environ['CITYSCAPES_RESULTS'] = '/home/yguo/Documents/other/edaps/edaps_experiments/exp-00007/work_dirs/None-exp00007/240303_2145_syn2cs_dacs_rcs001_cpl_maskrcnn_mitb5_poly10warm_s0_aac12/panoptic_eval/panop_eval_03-03-2024_21-45-52-588320/instance'
-        os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
+        # os.environ['CITYSCAPES_RESULTS'] = 'visual_instance/category/category_urbansyn_1model_final.pth_instance_img'
+        # os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
+        os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling_urbansyn.py')
 
