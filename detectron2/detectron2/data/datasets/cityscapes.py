@@ -59,11 +59,10 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir):
     with open(gt_dir,'r') as f:
         labels = [line.rstrip().split(' ') for line in f.readlines()]
     for idx, image in enumerate(images):
-        label_file = labels[idx][0]
-        if "_gtFine_labelTrainIds.png" in label_file:
-            label_file = label_file.replace("_gtFine_labelTrainIds.png", "_gtFine_labelIds.png")
-        instance_file = label_file.replace("_gtFine_labelIds.png", "_gtFine_instanceIds.png")
-        json_file = label_file.replace("_gtFine_labelIds.png", "_gtFine_polygons.json")
+        instance_file = labels[idx][0]
+        # if "_gtFine_instanceIds.png" in label_file:
+        label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
+        json_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_polygons.json")
         files.append((image[0], instance_file, label_file, json_file))
     
     assert len(files), "No images found in {}".format(image_dir)

@@ -81,14 +81,14 @@ def get_parser():
         nargs="+",
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
         # default=['/home/yguo/Documents/other/Mask2Former/danna_visual'],
-        default=['datasets/urbansyn_total_label/img_urbansyn_instance_category_val.txt'],
+        default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
         # default=['datasets/urbansyn_total_label/img_urbansyn_instance_small.txt'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category/category_urbansyn_500_',
+        default='visual_instance/category/category_synscapes_500_',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -105,7 +105,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_final.pth ./output/category/urbansyn_vehicle/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/category/synscapes_human_cycle/model_final.pth ./output/category/synscapes_vehicle/model_final.pth'],
         nargs=argparse.REMAINDER,
     )
     return parser

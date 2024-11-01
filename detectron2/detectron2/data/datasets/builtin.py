@@ -189,13 +189,24 @@ _RAW_CITYSCAPES_SPLITS = {
     "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),   
     "urbansyn_full_category_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
 
-    # "synscapes_human_cycle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
-    # "synscapes_vehicle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    "synscapes_category_human_cycle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    "synscapes_category_vehicle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+
+
+
 
     "synthia_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_human_cycle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_vehicle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
 
+
+    "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    
+    
+    
     "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
     "cityscapes_fine_category_human_cycle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
 

@@ -47,7 +47,7 @@ from cityscapesscripts.helpers.labels import name2label
 # constants
 WINDOW_NAME = "mask2former demo"
 
-EVAL=True
+EVAL=False
 VISUAL = False
 ONLY_VAL = False
 
@@ -83,13 +83,13 @@ def get_parser():
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
         # default=['/home/yguo/Documents/other/UDA4Inst/debug_cindy'],
         # default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
-        default=['datasets/urbansyn_total_label/img_urbansyn_instance_category_val.txt'],
+        default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category_urbanysn_full_',
+        default='visual_instance/category/category_1_synscapes_full_',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -104,7 +104,7 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
-        default=['MODEL.WEIGHTS','./output/category/urbansyn_full/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
         
         nargs=argparse.REMAINDER,
     )
@@ -367,7 +367,7 @@ if __name__ == "__main__":
         args.opts[1] = model
         cfg = setup_cfg(args)
         demo = VisualizationDemo(cfg)
-        target = 'human_cycle_vehicle'
+        target = '-'
         folder = args.output
         result_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-2] + '_instance_img'
         visul_save_folder = folder +  cfg['MODEL']['WEIGHTS'].split('/')[-2] + '_visul_img'
