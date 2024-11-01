@@ -9,12 +9,15 @@ import pycocotools.mask as mask_util
 import torch
 from torch.nn import functional as F
 
+import matplotlib.pyplot as plt
+
 
 from detectron2.config import configurable
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.projects.point_rend import ColorAugSSDTransform
 from detectron2.structures import BitMasks, Instances, polygons_to_bitmask
+from fvcore.transforms.transform import Transform, TransformList
 
 __all__ = ["MaskFormerInstanceDatasetMapper"]
 
@@ -150,6 +153,91 @@ class MaskFormerInstanceDatasetMapper:
             instances.gt_masks = masks.tensor
         return  instances
 
+    def __get_depth_information__(self, dataset_dict, transforms, data_key):
+        if data_key == "source":
+            depth_file_name = dataset_dict[data_key]["file_name"].replace('/rgb_translated_cityscapes/', '/depth/')\
+                .replace('_beauty_', '_depth_').replace('.png','.exr')
+            depth_map = cv_read_exr(depth_file_name)
+
+        elif data_key == "target":
+            depth_path = './datasets/cityscapes/depth_SwinMTL_train/'
+            image_id = dataset_dict[data_key]["image_id"].replace('leftImg8bit.png','depth.npy')
+            depth_file_name = depth_path + image_id
+            depth_map = np.load(depth_file_name)
+            # cv2.imwrite('./datasets/cityscapes/depth_SwinMTL_visual/' + dataset_dict[data_key]["image_id"], depth_map)
+        for index, t in enumerate(transforms):
+            # print(t.__class__.__name__)
+            if 'Color' in t.__class__.__name__:
+                continue
+            depth_map = t.apply_image(depth_map)
+        return depth_map
+
+    def __process_template_for_target__(self, transforms):
+        ''' make template image for target'''
+        template_mask = utils.read_image('template/cityscapes_ego_car_template.png', format=self.img_format)
+        for index, t in enumerate(transforms):
+            # print(t.__class__.__name__)
+            if 'Color' in t.__class__.__name__:
+                continue
+            template_mask = t.apply_image(template_mask)
+        template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
+        return template_mask
+
+    def __get_far_region__(self, depth_map, transforms, dataset_dict, data_key, image):
+        # for street, more far away place is in the smaller row. the max row is the boundry to cut. here we need to find max_row_index, mean_col_index
+        far_region = depth_map > 50
+        true_indices = np.where(far_region)
+        far_region_transforms = None
+        far_region_image = copy.deepcopy(image)
+
+        ''' here, we have far region crop for target and source image'''
+        if len(true_indices[0]) > 0:
+            ''' far region exist in the image '''  # synthetic depth is regular
+            max_row_index = np.max(true_indices[0]) # far region max row
+            mean_col_index = int(np.mean(true_indices[1]))
+
+            ''' design a crop box with 300*300 from input image shape(eg,512*1024), and center is the lowest row of the far region '''
+            ''' we will crop far region from orignal image '''
+            crop_x0 = max(mean_col_index - 256, 0)
+            crop_y0 = max(max_row_index - 150, 0)
+            crop_x1 = min(mean_col_index + 256, dataset_dict[data_key]["width"]) if crop_x0 != 0 \
+                else min(crop_x0 + 512, dataset_dict[data_key]["width"])
+            crop_y1 = min(max_row_index + 74, dataset_dict[data_key]["height"]) if crop_y0 != 0 else \
+                min(crop_y0 + 224, dataset_dict[data_key]["height"])
+            # cv2.imwrite('source_' + dataset_dict[data_key]["image_id"] + '_far.png',((far_region*1)*255))
+            far_region_transforms = TransformList([copy.deepcopy(t) for t in transforms if 'Crop' in t.__class__.__name__])
+            ''' rewrite the crop param'''
+            far_region_transforms[0].y0 = crop_y0
+            far_region_transforms[0].x0 = crop_x0
+            far_region_transforms[0].w = crop_x1 - crop_x0
+            far_region_transforms[0].h = crop_y1 - crop_y0
+            far_region_image = far_region_transforms[0].apply_image(far_region_image)
+            h, w, c = far_region_image.shape
+            crop_info = [crop_x0, crop_y0, crop_x0 + w, crop_y0 + h]
+        else:
+            ''' if no far region in image, we keep the key far_region_image and make it the same as the processd image'''
+            far_region_transforms = transforms
+            crop_info = []
+
+        return far_region_image, far_region_transforms, far_region, crop_info
+
+    def visulise(self, far_region_image, full_image, depth_map, far_region, file_name):
+        image_name = file_name.split('/')[-1]
+        far_region_image_vis = far_region_image.cpu().permute(1,2,0).numpy()
+        far_region_image_vis = cv2.cvtColor(far_region_image_vis,cv2.COLOR_BGR2RGB)
+        cv2.imwrite(image_name.replace('.png', '_far.png'), far_region_image_vis)
+
+        full_image_vis = full_image.cpu().permute(1,2,0).numpy()
+        full_image_vis = cv2.cvtColor(full_image_vis,cv2.COLOR_BGR2RGB)
+        cv2.imwrite(image_name.replace('.png', '_full.png'), full_image_vis)
+
+        depth_map_vis = depth_map.astype(int)
+        cv2.imwrite(image_name.replace('.png', '_depth.png'), depth_map_vis)
+        
+        far_region_vis = far_region.astype(int) * 250
+        cv2.imwrite(image_name.replace('.png', '_depth_region.png'), far_region_vis)
+
+
     def __call__(self, dataset_dict):
         """
         Args:
@@ -158,83 +246,31 @@ class MaskFormerInstanceDatasetMapper:
             dict: a format that builtin models in detectron2 accept
         """
         assert self.is_train, "MaskFormerPanopticDatasetMapper should only be used for training!"
-        dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
+        # dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below, cindy: from orinal code, seems useless
         if "source" in dataset_dict:
             for data_key in dataset_dict.keys():
                 image = utils.read_image(dataset_dict[data_key]["file_name"], format=self.img_format)
-                image_for_far = copy.deepcopy(image)
                 utils.check_image_size(dataset_dict[data_key], image)
                 aug_input = T.AugInput(image)
                 aug_input, transforms = T.apply_transform_gens(self.tfm_gens, aug_input)
                 image = aug_input.image
+
                 # introduce depth label
-                # depth_map = None # TODO make depth for target
-                # # TODO: temply using source depth for poth
-                # depth_file_name = dataset_dict["source"]["file_name"].replace('/rgb_translated_cityscapes/', '/depth/').replace('_beauty_', '_depth_').replace('.png','.exr')
-                # depth_map = cv_read_exr(depth_file_name)
+                depth_map = self.__get_depth_information__(dataset_dict, transforms, data_key)
+                
+                template_mask = self.__process_template_for_target__(transforms)
+                far_region_image, far_region_transforms, far_region, crop_info = self.__get_far_region__(depth_map, transforms, dataset_dict, data_key, image)
+                far_region_image = torch.as_tensor(np.ascontiguousarray(far_region_image.transpose(2, 0, 1)))
 
                 if data_key == "source":
-                    depth_file_name = dataset_dict[data_key]["file_name"].replace('/rgb_translated_cityscapes/', '/depth/').replace('_beauty_', '_depth_').replace('.png','.exr')
-                    depth_map = cv_read_exr(depth_file_name)
-                    # depth_map = (np.round(depth_map, decimals=0)).astype(int)
-                    far_region = depth_map > 70
+                    # transform instance masks
+                    dataset_dict_bp = copy.deepcopy(dataset_dict)
+                    annos, masks = self.__transform_annotation__(transforms, dataset_dict, data_key, image)
+                    far_region_annos, far_region_masks = self.__transform_annotation__(far_region_transforms, dataset_dict_bp, data_key, far_region_image)
+                    far_region_masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in far_region_masks]
+                    masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in masks]
 
-                elif data_key == "target":
-                    ''' depth map from depth anything, it is a relative depth , near depth is about 200 and far away is close to 0'''
-                    depth_path = '/home/yguo/Documents/other/UDA4Inst/datasets/cityscapes/cityscapes_depth_depth_anything/'
-                    image_id = dataset_dict[data_key]["image_id"].replace('leftImg8bit.png','leftImg8bit_depth.npy')
-                    # TODO , THIS IS relative depth, change to use metric depth, by meter
-                    depth_file_name = depth_path + image_id
-                    depth_map = np.load(depth_file_name)
-                    # depth_map = (1 / (depth_map+0.000001)) * 1000
-                    ''' we use 20/30 as the threshold of far away region'''
-                    far_region = depth_map < 30 # TODO : use real depth
-                
-                # to find max_row_index, mean_col_index
-                true_indices = np.where(far_region)
-                far_region_transforms = None
-                if len(true_indices[0]) > 0:
-                    max_row_index = np.max(true_indices[0])
-
-                    if data_key == "target":
-                        mean_col_index = true_indices[1][np.argmax(true_indices[0])] # pseudo depth is not regular, use lowest point
-                    else:
-                        mean_col_index = np.max(true_indices[1]) - np.min(true_indices[1]) # synthetic depth is regular
-
-                    ''' design a crop box with 300*300, and center is the lowest row of the far region'''
-                    crop_x0 = max(mean_col_index - 150, 0)
-                    crop_y0 = max(max_row_index - 150, 0)
-                    crop_x1 = min(mean_col_index + 150, dataset_dict[data_key]["width"])
-                    crop_y1 = max(max_row_index + 150, dataset_dict[data_key]["height"])
-                    # cv2.imwrite('source_' + dataset_dict[data_key]["image_id"] + '_far.png',((far_region*1)*255))
-                    far_region_transforms = copy.deepcopy(transforms)
-
-                    for index, t in enumerate(far_region_transforms):
-                        # print(t.__class__.__name__)
-                        if 'Crop' in t.__class__.__name__:
-                            t.y0 = crop_y0
-                            t.x0 = crop_x0
-                            t.w = crop_x1 - crop_x0
-                            t.y = crop_y1 - crop_y0
-                        if 'Resize' in t.__class__.__name__:
-                            continue
-                        far_region_image = t.apply_image(image_for_far) # if true_indices[0] is none, t is not changed, so far_region_image is the same as image processed.
-                else:
-                    far_region_image = image
-                    far_region_transforms = transforms
-                for index, t in enumerate(transforms):
-                    # print(t.__class__.__name__)
-                    if 'Color' in t.__class__.__name__:
-                        continue
-                    depth_map = t.apply_image(depth_map)
-
-                # Pad image here!
                 image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
-                try:
-                    far_region_image = torch.as_tensor(np.ascontiguousarray(far_region_image.transpose(2, 0, 1)))
-                except:
-                    print('...')
-                
                 if self.size_divisibility > 0:
                     image_size = (image.shape[-2], image.shape[-1])
                     padding_size = [
@@ -244,50 +280,30 @@ class MaskFormerInstanceDatasetMapper:
                         self.size_divisibility - image_size[0],
                     ]
                     # pad image
-                    image = F.pad(image, padding_size, value=128).contiguous()  
-                    far_region_image = F.pad(far_region_image, padding_size, value=128).contiguous()
+                    image = F.pad(image, padding_size, value=128).contiguous()
                     depth_map = F.pad(depth_map, padding_size, value=128).contiguous()
-
-
-                if data_key == "target":
-                    template_mask = utils.read_image('template/cityscapes_ego_car_template.png', format=self.img_format)
-                    for index, t in enumerate(transforms):
-                        # print(t.__class__.__name__)
-                        if 'Color' in t.__class__.__name__:
-                            continue
-                        template_mask = t.apply_image(template_mask)
-                    template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
-                    if self.size_divisibility > 0:
-                        template_mask = F.pad(template_mask, padding_size, value=128).contiguous()
-                    dataset_dict["target"]['template_img'] = template_mask
-                else:
-                    # transform instance masks
-                    dataset_dict_bp = copy.deepcopy(dataset_dict) # TODO : MAY BE REMOVED
-                    annos, masks = self.__transform_annotation__(transforms, dataset_dict, data_key, image)
-                    # if far_region_transforms is not None:
-                    far_region_annos, far_region_masks = self.__transform_annotation__(far_region_transforms, dataset_dict_bp, data_key, far_region_image)
-                    far_region_masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in far_region_masks]
-
-                    # Pad image and segmentation label here!
-                    # image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
-                    masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in masks]
-
-                    if self.size_divisibility > 0:
+                    far_region_image = F.pad(far_region_image, padding_size, value=128).contiguous()
+                    if data_key == "source":
                         # pad mask
                         masks = [F.pad(x, padding_size, value=0).contiguous() for x in masks]
-                        if far_region_transforms is not None:
-                            far_region_masks = [F.pad(x, padding_size, value=0).contiguous() for x in far_region_masks]
+                        far_region_masks = [F.pad(x, padding_size, value=0).contiguous() for x in far_region_masks]
+                    else:
+                        template_mask = F.pad(template_mask, padding_size, value=128).contiguous()
 
+                if data_key == "target":
+                    dataset_dict["target"]['template_img'] = template_mask
+                else:
                     instances = self.__mask_to_instance__(image, annos, masks)
                     dataset_dict[data_key]["instances"] = instances
-                    # if far_region_transforms is not None:
                     far_region_instances = self.__mask_to_instance__(far_region_image, far_region_annos, far_region_masks)
                     dataset_dict[data_key]["far_region_instances"] = far_region_instances
+                if 0:
+                    self.visulise(far_region_image, image, depth_map, far_region, dataset_dict[data_key]["file_name"])
 
-                # print('image shape : ', image.shape)
                 dataset_dict[data_key]["image"] = image
-                dataset_dict[data_key]["far_region_image"] = far_region_image #  TODO   DEBUG
                 dataset_dict[data_key]['depth'] = depth_map
+                dataset_dict[data_key]["far_region_image"] = far_region_image
+                dataset_dict[data_key]['crop_information'] = crop_info
         else:
             image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
             utils.check_image_size(dataset_dict, image)
