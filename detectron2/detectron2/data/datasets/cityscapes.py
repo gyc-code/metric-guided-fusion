@@ -59,11 +59,10 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir):
     with open(gt_dir,'r') as f:
         labels = [line.rstrip().split(' ') for line in f.readlines()]
     for idx, image in enumerate(images):
-        label_file = labels[idx][0]
-        if "_gtFine_labelTrainIds.png" in label_file:
-            label_file = label_file.replace("_gtFine_labelTrainIds.png", "_gtFine_labelIds.png")
-        instance_file = label_file.replace("_gtFine_labelIds.png", "_gtFine_instanceIds.png")
-        json_file = label_file.replace("_gtFine_labelIds.png", "_gtFine_polygons.json")
+        instance_file = labels[idx][0]
+        # if "_gtFine_instanceIds.png" in label_file:
+        label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
+        json_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_polygons.json")
         files.append((image[0], instance_file, label_file, json_file))
     
     assert len(files), "No images found in {}".format(image_dir)
@@ -100,7 +99,7 @@ def _process_ret_dataset_id_to_contiguous_id(ret):
             anno["category_id"] = dataset_id_to_contiguous_id[anno["category_id"]]
     return ret
 
-def load_urbansyn_instances(image_dir, gt_dir, from_json=True, to_polygons=True):
+def load_urbansyn_instances(image_dir, gt_dir, category='human_cycle_vehicle', from_json=True, to_polygons=True):
     """
     Args:
         image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
@@ -122,67 +121,7 @@ def load_urbansyn_instances(image_dir, gt_dir, from_json=True, to_polygons=True)
     # take up to 10m on a 8GPU server.
     pool = mp.Pool(processes=max(mp.cpu_count() // get_world_size() // 2, 4))
     ret = pool.map(
-        functools.partial(_urbansyn_files_to_dict, category='human_cycle_vehicle', from_json=from_json, to_polygons=to_polygons),
-        files,
-    )
-    logger.info("Loaded {} images from {}".format(len(ret), image_dir))
-    ret = _process_ret_dataset_id_to_contiguous_id(ret)
-    return ret
-
-def load_urbansyn_vehicle_instances(image_dir, gt_dir, from_json=True, to_polygons=True):
-    """
-    Args:
-        image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
-        gt_dir (str): path to the raw annotations. e.g., "~/cityscapes/gtFine/train".
-        category : human_cycle_vehicle, or human_cycle or vehicle
-        from_json (bool): whether to read annotations from the raw json file or the png files.
-        to_polygons (bool): whether to represent the segmentation as polygons
-            (COCO's format) instead of masks (cityscapes's format).
-
-    Returns:
-        list[dict]: a list of dicts in Detectron2 standard format. (See
-        `Using Custom Datasets </tutorials/datasets.html>`_ )
-    """
-    files = _get_files(image_dir, gt_dir, from_json=True, to_polygons=True)
-    if files is None:
-        return
-
-    logger.info("Preprocessing urbansyn vehicle annotations ...")
-    # This is still not fast: all workers will execute duplicate works and will
-    # take up to 10m on a 8GPU server.
-    pool = mp.Pool(processes=max(mp.cpu_count() // get_world_size() // 2, 4))
-    ret = pool.map(
-        functools.partial(_urbansyn_files_to_dict, category='vehicle', from_json=from_json, to_polygons=to_polygons),
-        files,
-    )
-    logger.info("Loaded {} images from {}".format(len(ret), image_dir))
-    ret = _process_ret_dataset_id_to_contiguous_id(ret)
-    return ret
-
-def load_urbansyn_human_cycle_instances(image_dir, gt_dir, from_json=True, to_polygons=True):
-    """
-    Args:
-        image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
-        gt_dir (str): path to the raw annotations. e.g., "~/cityscapes/gtFine/train".
-        category : human_cycle_vehicle, or human_cycle or vehicle
-        from_json (bool): whether to read annotations from the raw json file or the png files.
-        to_polygons (bool): whether to represent the segmentation as polygons
-            (COCO's format) instead of masks (cityscapes's format).
-
-    Returns:
-        list[dict]: a list of dicts in Detectron2 standard format. (See
-        `Using Custom Datasets </tutorials/datasets.html>`_ )
-    """
-    files = _get_files(image_dir, gt_dir, from_json=True, to_polygons=True)
-    if files is None:
-        return
-
-    logger.info("Preprocessing urbansyn annotations ...")
-    # This is still not fast: all workers will execute duplicate works and will
-    # take up to 10m on a 8GPU server.
-    pool = mp.Pool(processes=max(mp.cpu_count() // get_world_size() // 2, 4))
-    ret = pool.map(
-        functools.partial(_urbansyn_files_to_dict, category='human_cycle', from_json=from_json, to_polygons=to_polygons),
+        functools.partial(_urbansyn_files_to_dict, category=category, from_json=from_json, to_polygons=to_polygons),
         files,
     )
     logger.info("Loaded {} images from {}".format(len(ret), image_dir))
@@ -190,8 +129,7 @@ def load_urbansyn_human_cycle_instances(image_dir, gt_dir, from_json=True, to_po
     return ret
 
 
-
-def load_cityscapes_instances(image_dir, gt_dir, from_json=True, to_polygons=True):
+def load_cityscapes_instances(image_dir, gt_dir, category='human_cycle_vehicle', from_json=True, to_polygons=True):
     """
     Args:
         image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
@@ -220,12 +158,19 @@ def load_cityscapes_instances(image_dir, gt_dir, from_json=True, to_polygons=Tru
     logger.info("Preprocessing cityscapes annotations ...")
     # This is still not fast: all workers will execute duplicate works and will
     # take up to 10m on a 8GPU server.
+    
+    # ret = [_cityscapes_files_to_dict(files[0], category, from_json=from_json, to_polygons=to_polygons)]
     pool = mp.Pool(processes=max(mp.cpu_count() // get_world_size() // 2, 4))
-
-    ret = pool.map(
-        functools.partial(_cityscapes_files_to_dict, from_json=from_json, to_polygons=to_polygons),
-        files,
+    partial_func = functools.partial(
+    _cityscapes_files_to_dict,
+    category,
+    from_json=from_json,
+    to_polygons=to_polygons
     )
+    ret = pool.map(partial_func, files)
+    
+    # ret = pool.map(functools.partial(_cityscapes_files_to_dict,  from_json=from_json, to_polygons=to_polygons),files,category)
+    
     logger.info("Loaded {} images from {}".format(len(ret), image_dir))
 
     # Map cityscape ids to contiguous ids
@@ -272,7 +217,7 @@ def load_cityscapes_semantic(image_dir, gt_dir):
     return ret
 
 
-def _cityscapes_files_to_dict(files, from_json, to_polygons):
+def _cityscapes_files_to_dict(category, files,  from_json, to_polygons):
     """
     Parse cityscapes annotation files to a instance segmentation dataset dict.
 
@@ -315,6 +260,19 @@ def _cityscapes_files_to_dict(files, from_json, to_polygons):
             if "deleted" in obj:  # cityscapes data format specific
                 continue
             label_name = obj["label"]
+
+            if category == 'vehicle': ## cindy 
+                if label_name not in ['car', 'truck', 'bus', 'train']:
+                # if label_name not in ['car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle']: # a test
+                # if label_name not in ['car', 'truck', 'train', 'bicycle']: # a test
+                # if label_name not in [ 'truck', 'bus', 'train', 'motorcycle']: # a test
+                    continue
+            elif category == 'human_cycle':
+                if label_name not in ['person', 'rider', 'motorcycle', 'bicycle']:
+                # if label_name not in ['person', 'rider']: #, 'motorcycle', 'bicycle' # a test
+                # if label_name not in ['person', 'rider', 'motorcycle', 'bus']: # a test
+                # if label_name not in ['person', 'rider', 'car', 'bicycle']: #, 'motorcycle', 'bicycle' # a test
+                    continue
 
             try:
                 label = name2label[label_name]

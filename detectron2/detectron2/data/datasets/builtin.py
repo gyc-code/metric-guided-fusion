@@ -22,7 +22,7 @@ import os
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from .builtin_meta import ADE20K_SEM_SEG_CATEGORIES, _get_builtin_metadata
-from .cityscapes import load_cityscapes_instances, load_cityscapes_semantic, load_urbansyn_instances, load_urbansyn_human_cycle_instances, load_urbansyn_vehicle_instances
+from .cityscapes import load_cityscapes_instances, load_cityscapes_semantic, load_urbansyn_instances
 from .udadataset_cityscapes import load_syn_real_uda_instances, load_syn_real_uda_human_cycle_instances, load_syn_real_uda_vehicle_instances
 from .cityscapes_panoptic import register_all_cityscapes_panoptic
 from .coco import load_sem_seg, register_coco_instances
@@ -187,20 +187,28 @@ _RAW_CITYSCAPES_SPLITS = {
     "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
     "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),
     "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),   
+    "urbansyn_full_category_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+
+    "synscapes_category_human_cycle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    "synscapes_category_vehicle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
 
 
 
-    # "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_small.txt", "urbansyn_total_label/label_urbansyn_instance_small.txt"),
-    # "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_small.txt", "urbansyn_total_label/label_urbansyn_instance_small.txt"),   
-        
-
-    # "synscapes_human_cycle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
-    # "synscapes_vehicle_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
 
     "synthia_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_human_cycle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_vehicle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
 
+
+    "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    
+    
+    
+    "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
+    "cityscapes_fine_category_human_cycle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
 
     "cityscapes_fine_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
     # "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val_void255/"),
@@ -219,32 +227,48 @@ def register_all_cityscapes(root):
 
         inst_key = key.format(task="instance_seg")
         if 'cityscapes' in  inst_key:
-            DatasetCatalog.register(
-                inst_key,
-                lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
-                    x, y, from_json=True, to_polygons=True
-                ),
-            )
-        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
-                    lambda x=image_dir, y=gt_dir: load_urbansyn_human_cycle_instances(
-                        x, y, from_json=True, to_polygons=True
+                    lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
+                        x, y, category='human_cycle', from_json=True, to_polygons=True
                     ),
                 )
             elif '_vehicle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
-                    lambda x=image_dir, y=gt_dir: load_urbansyn_vehicle_instances(
-                        x, y, from_json=True, to_polygons=True
+                    lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
+                        x, y, category='vehicle', from_json=True, to_polygons=True
+                    ),
+                )
+            else:                
+                DatasetCatalog.register(
+                    inst_key,
+                    lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
+                        x, y, category='human_cycle_vehicle', from_json=True, to_polygons=True
+                    ),
+                )
+                
+        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key:
+            if '_human_cycle_' in inst_key:
+                DatasetCatalog.register(
+                    inst_key,
+                    lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
+                        x, y, category='human_cycle', from_json=True, to_polygons=True
+                    ),
+                )
+            elif '_vehicle_' in inst_key:
+                DatasetCatalog.register(
+                    inst_key,
+                    lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
+                        x, y, category='vehicle', from_json=True, to_polygons=True
                     ),
                 )
             else:
                 DatasetCatalog.register(
                     inst_key,
                     lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, from_json=True, to_polygons=True
+                        x, y, category='human_cycle_vehicle', from_json=True, to_polygons=True
                     ),
                 )
         

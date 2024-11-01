@@ -34,8 +34,8 @@ from predictor import VisualizationDemo
 from detectron2.structures import PolygonMasks, Instances
 from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.evaluation.cityscapes_evaluation import process_train_id_to_color_img
-from detectron2.engine.uda_instance_utils import visulize_color_instances, correct_label_by_CLIP, \
-correct_label_by_GT, remove_wrong_label_instance_by_GT,remove_empty_instance_by_GT, keep_stuff_label_instance_by_GT
+from detectron2.engine.uda_instance_utils import visulize_color_instances # correct_label_by_CLIP, \
+#correct_label_by_GT, remove_wrong_label_instance_by_GT,remove_empty_instance_by_GT, keep_stuff_label_instance_by_GT
 
 
 from detectron2.data import MetadataCatalog
@@ -47,9 +47,9 @@ from cityscapesscripts.helpers.labels import name2label
 # constants
 WINDOW_NAME = "mask2former demo"
 
-EVAL=True
+EVAL=False
 VISUAL = False
-ONLY_VAL = True
+ONLY_VAL = False
 
 
 "python demo.py --opts MODEL.WEIGHTS detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl"
@@ -82,13 +82,14 @@ def get_parser():
         nargs="+",
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
         # default=['/home/yguo/Documents/other/UDA4Inst/debug_cindy'],
-        default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
+        # default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
+        default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/urbanysn_uda_clip_remove_wrong_',
+        default='visual_instance/category/category_1_synscapes_full_',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -101,8 +102,10 @@ def get_parser():
     parser.add_argument(
         "--opts",
         help="Modify config options using the command-line 'KEY VALUE' pairs",
-        default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth'],
+        # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
+        
         nargs=argparse.REMAINDER,
     )
     return parser
@@ -272,7 +275,7 @@ def cat_pred_gt(visual_pred_color, mask_vis_output, file_name):
 
 def process_one(path, demo_human_cycle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder):
     # use PIL, to be consistent with evaluation
-    print('-')
+    # print('-')
     path = str(path)
     # print('path of img is : ', path)
     img = read_image(path, format="BGR")
@@ -287,7 +290,7 @@ def process_one(path, demo_human_cycle, _metadata, result_save_folder, visul_sav
     '''if the score(=class*mask)>0.5,I want to correct the score by CLIP, the class score will be updated by 
     CLIP output,and then update the score of the instance'''
     # instances = instances[instances.scores.cpu() > 0.5]
-    instances = correct_label_by_CLIP(instances, img, path, other_map_save_folder, debug_vis=VISUAL) #time consuming 2.8s
+    # instances = correct_label_by_CLIP(instances, img, path, other_map_save_folder, debug_vis=VISUAL) #time consuming 2.8s
     # instances = remove_wrong_label_instance_by_GT(instances, path)
     # instances, correct_class_pair = correct_label_by_GT(instances, path)
     
@@ -364,7 +367,7 @@ if __name__ == "__main__":
         args.opts[1] = model
         cfg = setup_cfg(args)
         demo = VisualizationDemo(cfg)
-        target = 'human_cycle_vehicle'
+        target = '-'
         folder = args.output
         result_save_folder = folder + cfg['MODEL']['WEIGHTS'].split('/')[-2] + '_instance_img'
         visul_save_folder = folder +  cfg['MODEL']['WEIGHTS'].split('/')[-2] + '_visul_img'
@@ -378,8 +381,13 @@ if __name__ == "__main__":
             if os.path.isdir(args_input[0]):
                 inputs = sorted(Path(args_input[0]).glob('*/*.png'))
             elif os.path.isfile(args_input[0]):
-                inputs = glob.glob(os.path.expanduser(args_input[0]))
-                assert args_input, "The input path(s) was not found"
+                # inputs = glob.glob(os.path.expanduser(args_input[0]))
+                # 读取文件中的每一行
+                with open(args_input[0], 'r') as file:
+                    lines = file.readlines()
+
+                # 去掉每行末尾的换行符
+                inputs = [line.strip() for line in lines]
 
         # process_all(inputs, demo, result_save_folder, visul_save_folder, error_map_save_folder)
         ''' multi-process '''
@@ -394,7 +402,7 @@ if __name__ == "__main__":
     if EVAL:
         # organise_evaluate_folder(result_save_folder)
         # organise_evaluate_folder(visul_save_folder)
-        result_save_folder='/home/yguo/Documents/other/UDA4Inst/visual_instance/urbanysn_uda_clip_urbansyn_random_small_fix_20kbs3_instance_img'
+        # result_save_folder='/home/yguo/Documents/other/UDA4Inst/visual_instance/urbanysn_uda_clip_urbansyn_random_small_fix_20kbs3_instance_img'
         os.environ['CITYSCAPES_RESULTS'] = result_save_folder
-        os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
-
+        # os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
+        os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling_urbansyn.py')

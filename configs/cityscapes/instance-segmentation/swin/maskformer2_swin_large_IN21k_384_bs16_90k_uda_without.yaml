@@ -12,8 +12,7 @@ MODEL:
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
   WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
-  # WEIGHTS: "./pretrain/glip_large_model.pth"
-  # WEIGHTS: "./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth"
+  # WEIGHTS: "./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth"
   #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   ##  #"swin_large_patch4_window12_384_22k.pkl"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
@@ -22,15 +21,14 @@ MODEL:
     NUM_OBJECT_QUERIES: 200
 SOLVER:
   IMS_PER_BATCH: 3
-  CHECKPOINT_PERIOD: 50000
+  CHECKPOINT_PERIOD: 100000
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
   BASE_LR: 0.0001
   MAX_ITER: 40000
 
-
 INPUT:
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"]
   MIN_SIZE_TRAIN_SAMPLING: "choice"
   MIN_SIZE_TEST: 1024
   MAX_SIZE_TRAIN: 4096 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
@@ -38,22 +36,23 @@ INPUT:
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
-
+    SIZE:  (1024, 1024)
+    
 DATASETS:
-  TRAIN: ('synscapes_category_human_cycle_instance_seg_train',) 
-  # ("uda_syn_real_instance_seg_train",)
+  TRAIN: ("urbansyn_instance_seg_train",)
+  #  ("uda_syn_real_instance_seg_train",)
   #("synscapes_human_cycle_instance_seg_train",)
   #("synscapes_instance_seg_train",) 
   #("urbansyn_vehicle_instance_seg_train",)
   # ("uda_syn_real_vehicle_instance_seg_train",)
   # ("uda_syn_real_human_cycle_instance_seg_train",)
   # #("uda_syn_real_instance_seg_train",) 
+  #('urbansyn_human_cycle_instance_seg_train',) 
   #("urbansyn_vehicle_instance_seg_train",) 
   #("urbansyn_instance_seg_train",) 
   # ("uda_syn_real_human_cycle_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)
 TEST:
-  EVAL_PERIOD: 5000
-OUTPUT_DIR: "./output/test"
+  EVAL_PERIOD: 1000
+OUTPUT_DIR: "./output/urbansyn_from_scratch"
 # VIS_PERIOD: 1
