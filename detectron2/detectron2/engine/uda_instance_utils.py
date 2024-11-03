@@ -40,8 +40,8 @@ Target_coefficients = None
 Source_coefficients = None
 
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
-# RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
-RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR THIS
+RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
+# RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR THIS
 # RARE_CLASS_NAMES = [4, 6] # for synthia, bus is 4,  motor is 6
 
 def translated_obj_mask(obj_mask,image, dx=50,dy=50):
@@ -106,13 +106,6 @@ def remove_occlussion(base_instances, pasted_instances):
     not_pasted_mask = ~all_pasted_masks
     # only keep uncovered region
     base_instances.gt_masks &= not_pasted_mask
-
-    # slow version
-    # paste_inst_num = pasted_instances.gt_masks.shape[0]
-    # for i in range(paste_inst_num):
-    #     not_past_inst = (~pasted_instances.gt_masks[i].unsqueeze(0)).int()
-    #     base_instances.gt_masks = (not_past_inst * base_instances.gt_masks.int()).bool()
-    # print(torch.equal(a, base_instances.gt_masks )) 
 
 def remove_ego_car_logo(pseudo_instance, template):
     ''' design for cityscapes, crop 1024*1024, remove pseudo label which is ego car head and logo'''
@@ -287,8 +280,8 @@ def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
 
 def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
     global Target_coefficients
-    depth_map_source = one_data['source']['depth'].astype(int)
-    depth_map_target = one_data['target']['depth'].astype(int)
+    # depth_map_source = one_data['source']['depth'].astype(int)
+    # depth_map_target = one_data['target']['depth'].astype(int)
     gt_instance = one_data['source']['instances']
     gt_classes = gt_instance.gt_classes
     # gt_polygons = gt_syn.gt_masks
@@ -310,10 +303,11 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
 
     gt_instance_select = Instances((hs, ws))
     THIS_FRAME_HAS_RARE_CLASSES = False
-
+    keep = torch.ones(len(gt_instance), dtype=torch.bool)
     for i, obj_mask in enumerate(gt_masks):
         instance_size = (obj_mask*1).sum().item()
         if instance_size == 0:
+            keep[i] = False
             continue 
         # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_source, depth_map_target)
         ''' shift obj_mask'''
@@ -325,15 +319,6 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         x_shift, y_shift = 0, 0
 
         shift_obj_mask, shift_source_image = translated_obj_mask(obj_mask,source_img, dx=x_shift,dy=y_shift)        
-        ins = Instances((hs, ws))
-        ins.gt_classes = gt_classes[i].view(1)
-        ins.gt_masks = shift_obj_mask.view(1, hs, ws)
-        ''' gather all big source instances'''
-        if len(gt_instance_select._fields) == 0:
-            gt_instance_select = Instances.cat([ins, ins]) # first one is redandence
-        else:
-            gt_instance_select = Instances.cat([gt_instance_select, ins])
-        ''' mix the image'''
         if i == 0:
             source_img = torch.from_numpy(cv2.GaussianBlur(source_img.permute(1,2,0).to(torch.uint8).numpy(), (5, 5),0)).permute(2,0,1)
         for c in range(3):
@@ -344,9 +329,14 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
                 instances_img[c,:][shift_obj_mask] = shift_source_image[c,:][shift_obj_mask]
 
         # for rare class balance
+        ins = Instances((hs, ws))
+        ins.gt_classes = gt_classes[i].view(1)
+        ins.gt_masks = shift_obj_mask.view(1, hs, ws)
         if gt_classes[i].item() in RARE_CLASS_NAMES:
             source_rare_class_samples.append({'img':source_img, 'instance':ins})
             THIS_FRAME_HAS_RARE_CLASSES = True
+            
+    gt_instance_select = gt_instance[keep]
 
     if len(gt_instance_select._fields) != 0: # if gt_instance_selecthas nothing, no labels mix
         # do class balance
@@ -399,39 +389,24 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
 
 def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, target_rare_class_samples=[]):
     gt_instance = one_data['source']['instances']
-    gt_classes = gt_instance.gt_classes
-    depth_map_source = one_data['source']['depth'].astype(int)
-    depth_map_target = one_data['target']['depth'].astype(int)
-    # gt_polygons = gt_syn.gt_masks
-    gt_masks = gt_instance.gt_masks
     source_img = one_data['source']['image']
-    _, hs, ws = source_img.shape
-
     target_img = one_data['target']['image']
     pseudo_instances = one_data['target']['instances']
-    # pseudo_instances = pseudo_label['instances']
     pred_masks = pseudo_instances.pred_masks
-    pred_classes = pseudo_instances.pred_classes
     file_id = one_data['target']['image_id'].split('.')[0]
 
-    # if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-    #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_img_black.jpg', target_img.permute(1,2,0).numpy())
-    #     instance_poly2color_semantic(gt_instance, hs, ws, folder_name, file_id, local_iter)
-    #     instance_poly2color_semantic(pseudo_instances, hs, ws, folder_name, file_id, local_iter, flag='pseudo')
     if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
         t_instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
-    #     target_img_vis = target_img.cpu().permute(1,2,0).numpy()
-    #     target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
-    #     cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_ori.jpg', target_img_vis)
 
-    pred_instance_select = Instances((hs, ws))
-    THIS_FRAME_HAS_RARE_CLASSES = False
+    keep = torch.ones(len(pseudo_instances), dtype=torch.bool)
     for i, obj_mask in enumerate(pred_masks.cpu()):
     # for i in range(gt_masks.shape[0]):
         instance_size = (obj_mask).sum().item()
         if instance_size == 0:
+            keep[i] = False
             continue 
         obj_mask = obj_mask.bool()
+        
         # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_target, depth_map_source) # TODO SHIFT FOR THIS
         x_shift, y_shift = 0, 0
         ''' shift obj_mask'''
@@ -442,37 +417,20 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
         #     y_shift = random.randint(0, 100)
         
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
-
-        ins = Instances((hs, ws))
-        ins.gt_classes = pred_classes[i].cpu().view(1)
-        ins.gt_masks = shift_obj_mask.cpu().view(1, hs, ws)
-        ''' gather all big source instances'''
-        if len(pred_instance_select._fields) == 0:
-            pred_instance_select = Instances.cat([ins, ins]) # first one is redandence
-        else:
-            pred_instance_select = Instances.cat([pred_instance_select, ins])
+        
         ''' mix the image'''
         for c in range(3):
             source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
             if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
                 t_instances_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
-        # # for rare class balance
-        # if pred_classes[i].item() in RARE_CLASS_NAMES:
-        #     target_rare_class_samples.append({'img':source_img, 'instance':ins})
-        #     THIS_FRAME_HAS_RARE_CLASSES = True
+    pseudo_instances_select = pseudo_instances[keep]
+    pseudo_instances_select.gt_classes = pseudo_instances_select.pred_classes.cpu()
+    pseudo_instances_select.gt_masks = pseudo_instances_select.pred_masks.bool().cpu()
 
-    if len(pred_instance_select._fields) != 0: # if gt_instance_selecthas nothing, no labels mix
-        # pred_instance_select_rename = Instances((hs, ws))
-        # pred_instance_select_rename.gt_masks = pred_instance_select.pred_masks.bool().cpu()
-        # pred_instance_select_rename.gt_classes = pred_instance_select.pred_classes.cpu()
-
-        # # do class balance
-        # if not THIS_FRAME_HAS_RARE_CLASSES and len(target_rare_class_samples):
-        #     # print('rare class sample : ', len(target_rare_class_samples))
-        #     pred_instance_select, target_rare_class_samples = rare_class_balance(target_rare_class_samples, source_img, pred_instance_select)
-
-        remove_occlussion(gt_instance, pred_instance_select[1:]) # modify pseudo_instances, remove parts of coverd by gt_instance_select
-        one_data['source']['instances'] = Instances.cat([gt_instance, pred_instance_select[1:]])
+    
+    if len(pseudo_instances_select._fields) != 0: # if gt_instance_selecthas nothing, no labels mix
+        remove_occlussion(gt_instance, pseudo_instances_select) # modify pseudo_instances, remove parts of coverd by gt_instance_select
+        one_data['source']['instances'] = Instances.cat([gt_instance, pseudo_instances_select])
         one_data['source']['image'] = source_img
         if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
             color_instances = visulize_color_instances(one_data['source']['instances'])
@@ -499,10 +457,6 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
             cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_pseudo_color_instance.jpg', color_pseudo_instances)
             del source_img_vis_cp
         del pseudo_instances
-
-            # cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_gt_img.jpg', source_img_vis)
-            # instance_poly2color_semantic(pseudo_instances, hs, ws, folder_name, file_id, local_iter, flag='mix')
-    # return one_data, target_rare_class_samples
     return one_data
 
 

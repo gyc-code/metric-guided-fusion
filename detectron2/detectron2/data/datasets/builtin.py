@@ -194,8 +194,6 @@ _RAW_CITYSCAPES_SPLITS = {
     "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
 
 
-
-
     "synthia_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_human_cycle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_vehicle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
@@ -204,7 +202,6 @@ _RAW_CITYSCAPES_SPLITS = {
     "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
     "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
     "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
-    
     
     
     "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
@@ -296,17 +293,30 @@ _RAW_UDA_CITYSCAPES_SPLITS = {
         # 'target':("cityscapes/leftimage8bit_train_small.txt", "cityscapes/gtFine_train_small.txt")
 
         },
-    "uda_syn_real_human_cycle_{task}_train": {
-        # 'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
-        # 'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "uda_urbansyn_syn_real_human_cycle_{task}_train": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
         },
-    "uda_syn_real_vehicle_{task}_train": {
-
+    "uda_urbansyn_syn_real_vehicle_{task}_train": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
-        # 'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-        # 'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+
+    "uda_synscapes_syn_real_human_cycle_{task}_train": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    "uda_synscapes_syn_real_vehicle_{task}_train": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    
+    "uda_synthia_syn_real_human_cycle_{task}_train": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    "uda_synthia_syn_real_vehicle_{task}_train": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
         },
 }

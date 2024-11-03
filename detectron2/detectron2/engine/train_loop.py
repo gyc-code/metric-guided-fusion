@@ -28,8 +28,9 @@ remove_ego_car_logo, break_source_target_match, visulize_color_instances, correc
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 
 VISUL = False
-ITERATION_TO_START_UDA = 0
+ITERATION_TO_START_UDA = 25000
 MINI_BATCH_LOSS = True
+USE_CLIP = False
 
 class HookBase:
     """
@@ -491,8 +492,6 @@ class AMPTrainer(SimpleTrainer):
         self.precision = precision
         self.log_grad_scaler = log_grad_scaler
         ''' cindy add ema'''
-        # import copy
-        # self.ema_model = copy.deepcopy(model).eval() # init , no weight load
         self.source_rare_class_samples = []
         # self.target_rare_class_samples = []
         self.local_iter = 0
@@ -500,39 +499,11 @@ class AMPTrainer(SimpleTrainer):
         timestamp = time.time()
         human_readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d-%H:%M:%S')
         self.folder_name = './output/debug_in_img_' + human_readable_time+ '/'
-        # if not os.path.exists(self.folder_name):
-        #     # shutil.rmtree(folder_name)
-        #     os.makedirs(self.folder_name)
-        #     print('make a new : ',self.folder_name)
         dir = pathlib.Path(self.folder_name)
         dir.mkdir(parents=True, exist_ok=True)
 
     def _init_ema_weights(self):
         self.ema_model = copy.deepcopy(self.model).eval() # init , no weight load
-
-
-    # def filter_instances(self, mask_input, rough_ins, crop_info, threshold=0.9):
-    #     ''' filter out the instances which has high IOU with rough_ins'''
-    #     def calculate_iou(mask1, mask2):
-    #         mask1 = mask1.bool()
-    #         mask2 = mask2.bool()
-    #         intersection = torch.sum((mask1 & mask2).float())
-    #         union = torch.sum((mask1 | mask2).float())
-    #         iou = intersection / union
-    #         return iou.item()
-
-    #     x0, y0, x1, y1 = crop_info
-    #     iou_list = []
-    #     for i in range(len(rough_ins)):
-    #         rough_ins_mask = rough_ins[i].pred_masks
-    #         crop_rough_ins_mask = rough_ins_mask[0, y0:y1, x0:x1]
-    #         if torch.sum(crop_rough_ins_mask).item() < 1:
-    #             continue
-    #         iou = calculate_iou(mask_input, crop_rough_ins_mask)
-    #         iou_list.append(iou)
-    #         if iou > threshold:
-    #             return False
-    #     return True
 
     def __print_label__(self, instances, image, save_path):
         image_copy = copy.deepcopy(image.permute(1,2,0).numpy().astype(np.uint8))
@@ -560,19 +531,7 @@ class AMPTrainer(SimpleTrainer):
 
 
     def _update_ema(self, iter):
-        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
-        #   the update is too slow
-        # for key in self.model.state_dict().keys():
-        #     ema_param = self.ema_model.state_dict()[key]
-        #     param = self.model.state_dict()[key]
-        #     if not param.data.shape:  # scalar tensor
-        #         ema_param.data = alpha_teacher * ema_param.data + (1 - alpha_teacher) * param.data
-        #     else:
-        #         ema_param.data[:] = \
-        #             alpha_teacher * ema_param[:].data[:] + \
-        #             (1 - alpha_teacher) * param[:].data[:]
-        #     print(key, ema_param.data[:])
-            
+        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)  
         #   try update this way to speedup
         with torch.no_grad():
             for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
@@ -648,33 +607,6 @@ class AMPTrainer(SimpleTrainer):
     #     else:
     #         return None
 
-    # def second_pseudo_labels_mask_out(self, data, index):
-    #     ''' use imag with masking out the object detected in the first time to generate pseudo label again '''
-    #     data_copy_plabel = copy.deepcopy(data)
-    #     mask = np.zeros(template_img.shape[1:], dtype=bool)
-    #     # Iterate over the instance masks and update the mask
-    #     for instance_mask in pseudo_labels[index]['instances'].pred_masks:
-    #         binary_mask = (instance_mask.cpu().numpy().astype(np.uint8)) * 255
-    #         contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #         bounding_boxes = [cv2.boundingRect(contour) for contour in contours]
-    #         mask_trans = np.zeros(binary_mask.shape, dtype=np.uint8)
-    #         # 在每个矩形框区域内填充白色
-    #         for bbox in bounding_boxes:
-    #             x, y, w, h = bbox
-    #             mask_trans[y:y+h, x:x+w] = 255
-    #         mask = np.logical_or(mask, mask_trans)
-    #     cv2.imwrite(self.folder_name + data[i]['target']['image_id'].split('.')[0] + '_mask.jpg', mask.astype(np.uint8) * 255)
-    #     original_image = data[index]['target']['image']
-    #     image_copy = copy.deepcopy(original_image)
-    #     mask_tensor = torch.from_numpy(mask).unsqueeze(0)  # 形状变为 (1, H, W)
-    #     mask_tensor = mask_tensor.expand_as(image_copy)  # 形状变为 (C, H, W)
-    #     image_copy[mask_tensor] = 0  # 将 mask 为 True 的区域变成黑色
-    #     cv2.imwrite(self.folder_name + data[i]['target']['image_id'].split('.')[0] + '_mask_image.jpg', image_copy.permute(1,2,0).numpy())
-    #     data_copy_plabel[index]['target']['image'] = image_copy
-    #     pseudo_labels_second = self.ema_model([data_copy_plabel[index]], target=True) 
-    #     pseudo_labels_second_instance = pseudo_labels_second[0]['instances']
-    #     pseudo_labels_second_instance = pseudo_labels_second_instance[pseudo_labels_second_instance.scores.cpu() > 0.9]
-    #     return pseudo_labels_second_instance
 
     def run_step(self):
         """
@@ -688,26 +620,14 @@ class AMPTrainer(SimpleTrainer):
         data_time = time.perf_counter() - start
         self.local_iter += 1
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
+            
             batch_size = len(data)
-            # cindy: shuffle source-target match in a batch
-            # if batch_size > 1:
-            #     print('iter: ', self.local_iter)
-            #     break_source_target_match(data)
+            assert batch_size == 3, f"Batch size must be 3, but got {batch_size}"
+            
             # Init/update ema model
             if self.local_iter == ITERATION_TO_START_UDA + 1:
                 self._init_ema_weights()
             self._update_ema(self.local_iter)
-
-            # source training
-            if not MINI_BATCH_LOSS:
-                self.optimizer.zero_grad()
-                with autocast(dtype=self.precision):
-                    source_loss_dict = self.model(data)
-                    if isinstance(source_loss_dict, torch.Tensor):
-                        source_losses = source_loss_dict
-                        source_loss_dict = {"total_source_loss": source_loss_dict}
-                    else:
-                        source_losses = sum(source_loss_dict.values())
             
             ''' cindy : generate pseudo label for target and do mix '''
             with torch.no_grad():
@@ -720,19 +640,18 @@ class AMPTrainer(SimpleTrainer):
                 pseudo_instances_num_list = []
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
-
                     pseudo_instances = pseudo_labels[i]['instances']
-                    '''if the score(=class*mask)>0.5,I want to correct the score by CLIP, the class score will be updated by 
-                    CLIP output,and then update the score of the instance'''
-                    pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.5]
-                    correct_label_by_CLIP(pseudo_labels[i]['instances'], data[i]['target']['image'])
+                    if USE_CLIP:
+                        '''if the score(=class*mask)>0.5,I want to correct the score by CLIP, the class score will be updated by 
+                        CLIP output,and then update the score of the instance'''
+                        pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.5]
+                        correct_label_by_CLIP(pseudo_labels[i]['instances'], data[i]['target']['image'])
 
-
-                    pseudo_instances.remove('class_scores')
-                    pseudo_instances.remove('mask_scores')
-                    pseudo_instances.remove('scores_8')
-
-                    # pseudo_instances.scores = pseudo_instances.class_scores * pseudo_instances.mask_scores
+                        pseudo_instances.remove('class_scores')
+                        pseudo_instances.remove('mask_scores')
+                        pseudo_instances.remove('scores_8')
+                        # pseudo_instances.scores = pseudo_instances.class_scores * pseudo_instances.mask_scores
+                        
                     pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
 
                     if VISUL:
@@ -748,15 +667,15 @@ class AMPTrainer(SimpleTrainer):
                     ##### Initialize a boolean mask of the same size as the template image
                     # second_instances = self.second_pseudo_labels_mask_out(data, i)
                     # second_instances = self.second_pseudo_labels_far_region(data, pseudo_labels, i)
-                    second_instances = None
+                    # second_instances = None
 
-                    if second_instances is not None:
-                        fuse_instance = Instances.cat([second_instances, pseudo_labels[i]['instances']])
-                        # fuse_instance = second_instances
-                    else:
-                        fuse_instance = pseudo_labels[i]['instances']
+                    # if second_instances is not None:
+                    #     fuse_instance = Instances.cat([second_instances, pseudo_labels[i]['instances']])
+                    #     # fuse_instance = second_instances
+                    # else:
+                    #     fuse_instance = pseudo_labels[i]['instances']
                     #############################################
-                    update_pseudo_label = remove_ego_car_logo(fuse_instance, template_img)
+                    update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
                     if update_pseudo_label is None:
                         pseudo_instances_num_list.append(0)
                         continue
@@ -768,10 +687,10 @@ class AMPTrainer(SimpleTrainer):
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
-                data_ori_0 = copy.deepcopy(data[0])
-                data_copy = copy.deepcopy(data)
+                # data_ori_0 = copy.deepcopy(data[0])
+                # data_copy = copy.deepcopy(data)
                 if VISUL:
-                    self.model.training = False
+                    self.model.eval()
                     data[0]['source']['height'] = 1024
                     data[0]['source']['width'] = 1024
 
@@ -784,75 +703,49 @@ class AMPTrainer(SimpleTrainer):
                     cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_source_inference_color_instance.jpg', source_instances_img)
                     del source, source_instances, source_instances_img
                    
-                for i in range(batch_size):
-                    if pseudo_instances_num_list[i] > 0:
-                        data[i], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[i], self.local_iter, self.folder_name, self.source_rare_class_samples)
-                        # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
-                        data_copy[i] = target_instance_paste_to_source_mix(data_copy[i], self.local_iter, self.folder_name)
+                '''since use mini_batch_loss,one batch data=data0: source+ data1: s2t+ data2: t2s
+                data[1] : source_instance_paste_to_target_mix, data[2] :target_instance_paste_to_source_mix
+                batch_size need to be 3'''
+                if pseudo_instances_num_list[1] > 0:
+                    data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], self.local_iter, self.folder_name, self.source_rare_class_samples)
+                    # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
+                if pseudo_instances_num_list[2] > 0:
+                    data[2] = target_instance_paste_to_source_mix(data[2], self.local_iter, self.folder_name)
 
-                ''' cindy: train with source2target mix data '''
-                ### cancle this train
-                if VISUL:
-                    self.model.training = False
-                    data[0]['source']['height'] = 1024
-                    data[0]['source']['width'] = 1024
-                    data_copy[0]['source']['height'] = 1024
-                    data_copy[0]['source']['width'] = 1024
-                    source_to_target_mix = self.model(data)
-                    target_to_source_mix = self.model(data_copy)
-                    source_to_target_mix_instances = source_to_target_mix[0]['instances']
-                    target_to_source_mix_instances = target_to_source_mix[0]['instances']
+                # if not MINI_BATCH_LOSS: ## cindy: cancle this train
+                #     self.model.training = True
+                #     mix_loss_dict = self.model(data)
+                #     if isinstance(mix_loss_dict, torch.Tensor):
+                #         s2t_mix_losses = mix_loss_dict
+                #         loss_dict = {"total_mix_loss": mix_loss_dict}
+                #     else:
+                #         s2t_mix_losses = sum(mix_loss_dict.values())
 
-                    source_to_target_mix_instances = source_to_target_mix_instances[source_to_target_mix_instances.scores.cpu() > 0.8]
-                    target_to_source_mix_instances = target_to_source_mix_instances[target_to_source_mix_instances.scores.cpu() > 0.8]
-                    
-                    source_to_target_mix_instances_img = visulize_color_instances(source_to_target_mix_instances)
-                    target_to_source_mix_instances_img = visulize_color_instances(target_to_source_mix_instances)
-                    file_id = data[0]['target']['image_id'].split('.')[0]
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_s2t_inference_color_instance.jpg', source_to_target_mix_instances_img)
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_t2s_inference_color_instance.jpg', target_to_source_mix_instances_img)
-                    del source_to_target_mix, source_to_target_mix_instances
-                    del target_to_source_mix, target_to_source_mix_instances
-
-                if not MINI_BATCH_LOSS:
-                    self.model.training = True
-                    mix_loss_dict = self.model(data)
-                    if isinstance(mix_loss_dict, torch.Tensor):
-                        s2t_mix_losses = mix_loss_dict
-                        loss_dict = {"total_mix_loss": mix_loss_dict}
+                #     ''' cindy: train with target2source mix data '''
+                #     t2s_mix_loss_dict = self.model(data_copy)
+                #     if isinstance(t2s_mix_loss_dict, torch.Tensor):
+                #         t2s_mix_losses = t2s_mix_loss_dict
+                #         loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
+                #     else:
+                #         t2s_mix_losses = sum(t2s_mix_loss_dict.values())
+                #     # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
+                #     # unite_loss = s2t_mix_losses # ablation
+                #     # unite_loss = t2s_mix_losses # ablation
+                #     # unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
+                #     unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
+                #     # unite_loss = t2s_mix_losses
+                #     unite_loss_dict = t2s_mix_loss_dict
+                # else:
+                ''' use mini batch loss ,one batch data=data0: source+ data1: s2t+ data2: t2s '''
+                self.optimizer.zero_grad()
+                self.model.train()
+                with autocast(dtype=self.precision):
+                    unite_loss_dict = self.model(data)
+                    if isinstance(unite_loss_dict, torch.Tensor):
+                        unite_loss = unite_loss_dict
+                        unite_loss_dict = {"total_source_loss": unite_loss_dict}
                     else:
-                        s2t_mix_losses = sum(mix_loss_dict.values())
-
-                    ''' cindy: train with target2source mix data '''
-                    t2s_mix_loss_dict = self.model(data_copy)
-                    if isinstance(t2s_mix_loss_dict, torch.Tensor):
-                        t2s_mix_losses = t2s_mix_loss_dict
-                        loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
-                    else:
-                        t2s_mix_losses = sum(t2s_mix_loss_dict.values())
-                    # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
-                    # unite_loss = s2t_mix_losses # ablation
-                    # unite_loss = t2s_mix_losses # ablation
-                    # unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
-                    unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
-                    # unite_loss = t2s_mix_losses
-                    unite_loss_dict = t2s_mix_loss_dict
-                else:
-                    ''' use mini batch loss ,one batch data=source+s2t+t2s '''
-                    self.optimizer.zero_grad()
-                    self.model.training = True
-                    assert batch_size % 3 == 0, f"Batch size must be a multiple of 3, but got {batch_size}"
-                    if batch_size == 3:
-                        data[0] = data_ori_0
-                        # data[1] = data[1]
-                        data[2] = data_copy[2]
-                    with autocast(dtype=self.precision):
-                        unite_loss_dict = self.model(data)
-                        if isinstance(unite_loss_dict, torch.Tensor):
-                            unite_loss = unite_loss_dict
-                            unite_loss_dict = {"total_source_loss": unite_loss_dict}
-                        else:
-                            unite_loss = sum(unite_loss_dict.values())
+                        unite_loss = sum(unite_loss_dict.values())
 
                 self.grad_scaler.scale(unite_loss).backward()
                 self.grad_scaler.step(self.optimizer)
@@ -870,11 +763,11 @@ class AMPTrainer(SimpleTrainer):
         else:
             if 'source' in data[0]: # when local_iter < ITERATION_TO_START_UDA, also use only source training
                 data = [x['source'] for x in data]
-                for x in data:
-                    if 0:
-                    # if random.randint(0, 1):
-                        x['image'] = x['far_region_image']
-                        x['instances'] = x['far_region_instances']
+                # for x in data:
+                #     if 0:
+                #     # if random.randint(0, 1):
+                #         x['image'] = x['far_region_image']
+                #         x['instances'] = x['far_region_instances']
 
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()

@@ -509,9 +509,9 @@ class MaskFormer(nn.Module):
         result.scores = scores_per_image * mask_scores_per_image
         result.pred_classes = labels_per_image
         # cindy add 
-        result.class_scores = scores_per_image
-        result.mask_scores = mask_scores_per_image
-        result.scores_8 = scores[topk_indices]
+        # result.class_scores = scores_per_image
+        # result.mask_scores = mask_scores_per_image
+        # result.scores_8 = scores[topk_indices]
         
         # np.save("./vehicle_feature/" + str(self.local_count) + "_labels_per_image.npy", labels_per_image.cpu())
         # np.save("./vehicle_feature/" + str(self.local_count) + "_scores.npy", result.scores.cpu())

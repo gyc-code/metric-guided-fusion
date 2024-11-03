@@ -533,8 +533,6 @@ def _urbansyn_files_to_dict(files, category, from_json, to_polygons):
     ret["annotations"] = annos
     return ret
 
-
-
 if __name__ == "__main__":
     """
     Test the cityscapes dataset loader.
