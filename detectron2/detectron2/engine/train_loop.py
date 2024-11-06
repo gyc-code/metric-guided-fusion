@@ -23,7 +23,7 @@ from detectron2.structures import Instances, Boxes
 import torch.nn.functional as F
 
 from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix,\
-remove_ego_car_logo, break_source_target_match, visulize_color_instances, correct_label_by_CLIP
+remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 
