@@ -1,18 +1,31 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
 import math
-import torch
-from detectron2.solver.lr_scheduler import LRScheduler, _get_warmup_factor_at_iter
 from typing import List
+import torch
+
+from detectron2.solver.lr_scheduler import LRScheduler, _get_warmup_factor_at_iter
+
+# NOTE: PyTorch's LR scheduler interface uses names that assume the LR changes
+# only on epoch boundaries. We typically use iteration based schedules instead.
+# As a result, "epoch" (e.g., as in self.last_epoch) should be understood to mean
+# "iteration" instead.
+
+# FIXME: ideally this would be achieved with a CombinedLRScheduler, separating
+# MultiStepLR with WarmupLR but the current LRScheduler design doesn't allow it.
+
 
 class WarmupPolyLR(LRScheduler):
     """
-    Poly learning rate schedule with warmup, split into two segments.
+    Poly learning rate schedule used to train DeepLab.
+    Paper: DeepLab: Semantic Image Segmentation with Deep Convolutional Nets,
+        Atrous Convolution, and Fully Connected CRFs.
+    Reference: https://github.com/tensorflow/models/blob/21b73d22f3ed05b650e85ac50849408dd36de32e/research/deeplab/utils/train_utils.py#L337  # noqa
     """
 
     def __init__(
         self,
         optimizer: torch.optim.Optimizer,
-        max_iters: int,  # Total iterations x = a + b
-        # segment_iters: List[int],  # [a, b]
+        max_iters: int,
         warmup_factor: float = 0.001,
         warmup_iters: int = 1000,
         warmup_method: str = "linear",
@@ -21,9 +34,6 @@ class WarmupPolyLR(LRScheduler):
         constant_ending: float = 0.0,
     ):
         self.max_iters = max_iters
-        a = 0.5
-        self.segment_iters = [int(a*max_iters), int((1-a)*max_iters)]  # [a, b], where sum(segment_iters) == max_iters
-        # assert sum(segment_iters) == max_iters, "Sum of segment_iters must be equal to max_iters"
         self.warmup_factor = warmup_factor
         self.warmup_iters = warmup_iters
         self.warmup_method = warmup_method
@@ -32,35 +42,23 @@ class WarmupPolyLR(LRScheduler):
         super().__init__(optimizer, last_epoch)
 
     def get_lr(self) -> List[float]:
-        # Determine which segment we're in
-        cumulative_iters = 0
-        for idx, segment_length in enumerate(self.segment_iters):
-            if self.last_epoch < cumulative_iters + segment_length:
-                # We're in segment idx
-                segment_max_iters = segment_length
-                segment_last_epoch = self.last_epoch - cumulative_iters
-                break
-            cumulative_iters += segment_length
-        else:
-            # If last_epoch exceeds max_iters, keep the last learning rate
-            segment_max_iters = self.segment_iters[-1]
-            segment_last_epoch = self.segment_iters[-1]
-
         warmup_factor = _get_warmup_factor_at_iter(
-            self.warmup_method, segment_last_epoch, self.warmup_iters, self.warmup_factor
+            self.warmup_method, self.last_epoch, self.warmup_iters, self.warmup_factor
         )
-
         if self.constant_ending > 0 and warmup_factor == 1.0:
+            # Constant ending lr.
             if (
-                math.pow((1.0 - segment_last_epoch / segment_max_iters), self.power)
+                math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
                 < self.constant_ending
             ):
                 return [base_lr * self.constant_ending for base_lr in self.base_lrs]
-
+        # print([base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
+        #     for base_lr in self.base_lrs][0])
         return [
-            base_lr * warmup_factor * math.pow((1.0 - segment_last_epoch / segment_max_iters), self.power)
+            base_lr * warmup_factor * math.pow((1.0 - self.last_epoch / self.max_iters), self.power)
             for base_lr in self.base_lrs
         ]
+ 
 
     def _compute_values(self) -> List[float]:
         # The new interface

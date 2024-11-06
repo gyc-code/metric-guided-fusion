@@ -298,7 +298,7 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         if i == 0:
             source_img = torch.from_numpy(cv2.GaussianBlur(source_img.permute(1,2,0).to(torch.uint8).numpy(), (5, 5),0)).permute(2,0,1)
             
-        if instance_size > 5000:
+        if instance_size > 1000000000: #5000
             ''' instance-wise mix'''
             for c in range(3):
                 # target_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
@@ -423,7 +423,7 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
         
         ''' mix the image'''
-        if instance_size > 5000:
+        if instance_size > 1000000000: #5000
             ''' instance-wise mix'''
             for c in range(3):
                 source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
