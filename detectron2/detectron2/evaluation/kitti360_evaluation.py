@@ -78,12 +78,15 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
 
         for input, output in zip(inputs, outputs):
             file_name = input["file_name"]
-            basename = os.path.splitext(os.path.basename(file_name))[0]
-            pred_txt = os.path.join(self._temp_dir, basename + "_pred.txt")
+            parts = file_name.split('/')
+            last_four_parts = parts[-4:]
+            file_name = ('_'.join(last_four_parts))
+            # basename = os.path.splitext(os.path.basename(file_name))[0]
+            basename = file_name.split('.')[0]
+            pred_txt = os.path.join(self._temp_dir, file_name.replace(".png", "_pred.txt"))
 
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
-                # output = output[output.scores > 0.1]  ##  cindy add , filter will decrease ap
                 num_instances = len(output)
                 with open(pred_txt, "w") as fout:
                     for i in range(num_instances):
@@ -114,7 +117,6 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
         if comm.get_rank() > 0:
             return
         import kitti360scripts.evaluation.semantic_2d.evalInstanceLevelSemanticLabeling as kitti360_eval
-        self._temp_dir = '/tmp/kitti360_eval__giawtow'
 
         self._logger.info("Evaluating results under {} ...".format(self._temp_dir))
 
@@ -124,10 +126,10 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
         kitti360_eval.args.JSONOutput = False
         kitti360_eval.args.colorized = False
         kitti360_eval.args.gtInstancesFile = os.path.join(self._temp_dir, "gtInstances_kitti360.json")
+        
 
         # These lines are adopted from
         # https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py # noqa
-        gt_dir = PathManager.get_local_path(self._metadata.gt_dir)
         
         predictionImgList = []
         groundTruthImgList = []
@@ -135,8 +137,6 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
         
         # args.groundTruthListFile = os.path.join(args.kitti360Path, 'data_2d_semantics', 'train', '2013_05_28_drive_val_frames.txt')
         groundTruthListFile = '/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/2013_05_28_drive_val_frames.txt'
-
-
         # use the ground truth search string specified above
         groundTruthImgList = kitti360_eval.getGroundTruth(groundTruthListFile)
         if not groundTruthImgList:

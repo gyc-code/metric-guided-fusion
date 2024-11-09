@@ -66,7 +66,7 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key):
             # kitti360/polygon/2013_05_28_drive_0005_sync_image_00_instance_0000004472_gtFine_polygons.json
             parts = instance_file.split('/')
             last_four_parts = parts[-4:]
-            json_file = ('/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/polygon/' + '_'.join(last_four_parts)).replace('.png', '_gtFine_polygons.json')
+            json_file = (('/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/polygon/' + '_'.join(last_four_parts)).replace('.png', '_gtFine_polygons.json')).replace('_semantic_', '_instance_')
             files.append((image[0], None, None, json_file))   
         else:
             # instance_file = label_file
