@@ -193,18 +193,13 @@ _RAW_CITYSCAPES_SPLITS = {
     "synscapes_category_vehicle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
     "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
 
-
-
-
     "synthia_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_human_cycle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
     "synthia_vehicle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
 
-
     "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
     "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
     "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
-    
     
     
     "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
@@ -213,9 +208,10 @@ _RAW_CITYSCAPES_SPLITS = {
     "cityscapes_fine_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
     # "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val_void255/"),
     "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val/"),
-
-    
     "cityscapes_fine_{task}_test": ("cityscapes/leftImg8bit/test/", "cityscapes/gtFine/test/"),
+    
+    "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
+    "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image.txt", "kitti360/2013_05_28_drive_val_frames_label.txt"),
 }
 
 
@@ -249,31 +245,31 @@ def register_all_cityscapes(root):
                     ),
                 )
                 
-        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key:
+        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key or 'kitti360' in inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
                     lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, category='human_cycle', from_json=True, to_polygons=True
+                        x, y, inst_key=inst_key, category='human_cycle', from_json=True, to_polygons=True
                     ),
                 )
             elif '_vehicle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
                     lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, category='vehicle', from_json=True, to_polygons=True
+                        x, y, inst_key=inst_key, category='vehicle', from_json=True, to_polygons=True
                     ),
                 )
             else:
                 DatasetCatalog.register(
                     inst_key,
                     lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, category='human_cycle_vehicle', from_json=True, to_polygons=True
+                        x, y, inst_key=inst_key, category='human_cycle_vehicle', from_json=True, to_polygons=True
                     ),
                 )
-        
+
         MetadataCatalog.get(inst_key).set(
-            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_instance", **meta  #"cityscapes_instance"  cityscapes_instance2sem_seg
+            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="kitti360_instance", **meta  #"cityscapes_instance"  cityscapes_instance2sem_seg
         )
 
         sem_key = key.format(task="sem_seg")
@@ -350,7 +346,7 @@ def register_all_uda_cityscapes(root): # design by cindy , only for instance so 
 
             MetadataCatalog.get(inst_key).set(
                 #cindy add :cityscapes_instance2sem_seg  , origin : cityscapes_instance
-                source_image_dir=source_image_dir, source_gt_dir=source_gt_dir, target_image_dir=target_image_dir, evaluator_type="cityscapes_instance", **meta)
+                source_image_dir=source_image_dir, source_gt_dir=source_gt_dir, target_image_dir=target_image_dir, evaluator_type="kitti360_instance", **meta) #cityscapes_instance
 
     # print('finish register')
             

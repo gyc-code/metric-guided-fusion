@@ -52,7 +52,7 @@ def _get_cityscapes_files(image_dir, gt_dir):
     return files
 
 
-def _get_cityscapes_files_from_filelist(image_dir, gt_dir):
+def _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key):
     files = []
     with open(image_dir,'r') as f:
         images = [line.rstrip().split(' ') for line in f.readlines()]
@@ -61,25 +61,36 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir):
     for idx, image in enumerate(images):
         instance_file = labels[idx][0]
         # if "_gtFine_instanceIds.png" in label_file:
-        label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
-        json_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_polygons.json")
-        files.append((image[0], instance_file, label_file, json_file))
+        if 'kitti360' in inst_key:
+            # KITTI360/data_2d_semantics/train/2013_05_28_drive_0005_sync/image_00/instance/0000006449.png
+            # kitti360/polygon/2013_05_28_drive_0005_sync_image_00_instance_0000004472_gtFine_polygons.json
+            parts = instance_file.split('/')
+            last_four_parts = parts[-4:]
+            json_file = ('/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/polygon/' + '_'.join(last_four_parts)).replace('.png', '_gtFine_polygons.json')
+            files.append((image[0], None, None, json_file))   
+        else:
+            # instance_file = label_file
+            label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
+            json_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_polygons.json")
+            files.append((image[0], instance_file, label_file, json_file))
     
     assert len(files), "No images found in {}".format(image_dir)
     for f in files[0]:
+        if 'kitti360' in inst_key:
+            continue
         assert PathManager.isfile(f), f
     return files
 
 
 
-def _get_files(image_dir, gt_dir, from_json=True, to_polygons=True):
+def _get_files(image_dir, gt_dir, inst_key, from_json=True, to_polygons=True):
     if from_json:
         assert to_polygons, (
             "urbansyn's json annotations are in polygon format. "
             "Converting to mask format is not supported now."
         )
     if os.path.isfile(image_dir) and  os.path.isfile(gt_dir):
-        files = _get_cityscapes_files_from_filelist(image_dir, gt_dir)
+        files = _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key)
         return files
     elif os.path.isdir(image_dir) and  os.path.isdir(gt_dir):
         files = _get_cityscapes_files(image_dir, gt_dir) # original
@@ -99,7 +110,7 @@ def _process_ret_dataset_id_to_contiguous_id(ret):
             anno["category_id"] = dataset_id_to_contiguous_id[anno["category_id"]]
     return ret
 
-def load_urbansyn_instances(image_dir, gt_dir, category='human_cycle_vehicle', from_json=True, to_polygons=True):
+def load_urbansyn_instances(image_dir, gt_dir, inst_key, category='human_cycle_vehicle', from_json=True, to_polygons=True):
     """
     Args:
         image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
@@ -113,7 +124,7 @@ def load_urbansyn_instances(image_dir, gt_dir, category='human_cycle_vehicle', f
         list[dict]: a list of dicts in Detectron2 standard format. (See
         `Using Custom Datasets </tutorials/datasets.html>`_ )
     """
-    files = _get_files(image_dir, gt_dir, from_json=True, to_polygons=True)
+    files = _get_files(image_dir, gt_dir, inst_key, from_json=True, to_polygons=True)
     if files is None:
         return
     logger.info("Preprocessing urbansyn annotations ...")
@@ -397,7 +408,7 @@ def _urbansyn_files_to_dict(files, category, from_json, to_polygons):
     """
     from cityscapesscripts.helpers.labels import id2label, name2label
 
-    image_file, instance_id_file, _, json_file = files
+    image_file, _, _, json_file = files
 
     annos = []
 
@@ -479,57 +490,6 @@ def _urbansyn_files_to_dict(files, category, from_json, to_polygons):
 
         if VISUALIZE_POLYGON:
             cv2.imwrite(image_file.split('/')[-1].replace('.png', '_polygon.png') , img_clone) ####  cindy add, visulize polygon
-        
-    else:
-        # See also the official annotation parsing scripts at
-        # https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/evaluation/instances2dict.py  # noqa
-        with PathManager.open(instance_id_file, "rb") as f:
-            inst_image = np.asarray(Image.open(f), order="F")
-        # ids < 24 are stuff labels (filtering them first is about 5% faster)
-        flattened_ids = np.unique(inst_image[inst_image >= 24])
-
-        ret = {
-            "file_name": image_file,
-            "image_id": os.path.basename(image_file),
-            "height": inst_image.shape[0],
-            "width": inst_image.shape[1],
-        }
-
-        for instance_id in flattened_ids:
-            # For non-crowd annotations, instance_id // 1000 is the label_id
-            # Crowd annotations have <1000 instance ids
-            label_id = instance_id // 1000 if instance_id >= 1000 else instance_id
-            label = id2label[label_id]
-            if not label.hasInstances or label.ignoreInEval:
-                continue
-
-            anno = {}
-            anno["iscrowd"] = instance_id < 1000
-            anno["category_id"] = label.id
-
-            mask = np.asarray(inst_image == instance_id, dtype=np.uint8, order="F")
-
-            inds = np.nonzero(mask)
-            ymin, ymax = inds[0].min(), inds[0].max()
-            xmin, xmax = inds[1].min(), inds[1].max()
-            anno["bbox"] = (xmin, ymin, xmax, ymax)
-            if xmax <= xmin or ymax <= ymin:
-                continue
-            anno["bbox_mode"] = BoxMode.XYXY_ABS
-            if to_polygons:
-                # This conversion comes from D4809743 and D5171122,
-                # when Mask-RCNN was first developed.
-                contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[
-                    -2
-                ]
-                polygons = [c.reshape(-1).tolist() for c in contours if len(c) >= 3]
-                # opencv's can produce invalid polygons
-                if len(polygons) == 0:
-                    continue
-                anno["segmentation"] = polygons
-            else:
-                anno["segmentation"] = mask_util.encode(mask[:, :, None])[0]
-            annos.append(anno)
     ret["annotations"] = annos
     return ret
 
