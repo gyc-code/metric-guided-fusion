@@ -48,7 +48,7 @@ from utils import *
 # constants
 
 EVAL=True
-VISUAL = True
+VISUAL = False
 ONLY_VAL = False
 
 
@@ -62,7 +62,8 @@ def get_parser():
     parser.add_argument(
         "--config-file",
         # default="/home/yguo/Documents/other/detectron2/configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
-        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
+        # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
+        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -75,14 +76,14 @@ def get_parser():
         # default=['/home/yguo/Documents/other/UDA4Inst/debug_cindy'],
         # default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
         # default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
-        default=['datasets/kitti360/2013_05_28_drive_val_frames_image.txt'],
+        default=['datasets/kitti360/2013_05_28_drive_val_frames_image_all.txt'],
         
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category_kitti/category_1_synscapes_full_on_kitti360_test/',
+        default='visual_instance/category_kitti/test/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -97,7 +98,10 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
-        default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
+        # default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
+        # default=['MODEL.WEIGHTS','./output/category/urbansyn_full/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/category/synthia_full/model_final.pth'],
+        
         
         nargs=argparse.REMAINDER,
     )
@@ -108,6 +112,7 @@ def process_one(path, demo_human_cycle, _metadata, result_save_folder, visul_sav
     # use PIL, to be consistent with evaluation
     # print('-')
     path = str(path)
+    print('time:',time.time(), 'processing : ', path, flush=True)
     basename, pred_txt, file_name = get_names(path, dataset_name, result_save_folder)
     mask_img, visual_pred, error_map_filename = None, None, None
     
@@ -141,7 +146,6 @@ if __name__ == "__main__":
     if not ONLY_VAL:
         args = get_parser().parse_args()
         result_save_folder, visul_save_folder, other_map_save_folder  = preparation(args.output)
-        
 
         '''  input multi model, seperate by ' ', run loop'''
         args_copy = copy.deepcopy(args)
@@ -160,17 +164,17 @@ if __name__ == "__main__":
                     lines = file.readlines()
                 inputs = [line.strip() for line in lines]
 
-        process_all(inputs, demo, result_save_folder, visul_save_folder, other_map_save_folder)
+        # process_all(inputs, demo, result_save_folder, visul_save_folder, other_map_save_folder)
         ''' multi-process '''
-        # mp.set_start_method("spawn", force=True)
-        # _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
-        # paramers = []
-        # dataset_name = 'kitti360'
-        # for i in range(len(inputs)):
-        #     paramers.append((inputs[i], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name))
-        # # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
-        # pool = mp.Pool(processes=5)
-        # pool.starmap(process_one, paramers)
+        mp.set_start_method("spawn", force=True)
+        _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+        paramers = []
+        dataset_name = 'kitti360'
+        for i in range(len(inputs)):
+            paramers.append((inputs[i], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name))
+        # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
+        pool = mp.Pool(processes=2)
+        pool.starmap(process_one, paramers)
     
     if EVAL:
         if 0:

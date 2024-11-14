@@ -20,8 +20,8 @@ MODEL:
   MASK_FORMER:
     NUM_OBJECT_QUERIES: 200
 SOLVER:
-  IMS_PER_BATCH: 3
-  CHECKPOINT_PERIOD: 10000
+  IMS_PER_BATCH: 6
+  CHECKPOINT_PERIOD: 90000
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
   BASE_LR: 0.0001
@@ -30,34 +30,23 @@ SOLVER:
 
 INPUT:
   # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 188) for x in range(5, 10)]"] #(5, 21) # kitti 376*1408
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 376) for x in range(5, 21)]"] #(5, 21) # kitti 376*1408
 
   MIN_SIZE_TRAIN_SAMPLING: "choice"
   MIN_SIZE_TEST: 376
-  MAX_SIZE_TRAIN: 2816 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
-  MAX_SIZE_TEST: 1408
+  MAX_SIZE_TRAIN: 1504 # kitti 376*4
+  MAX_SIZE_TEST: 752 # kitti 376*2
   CROP:
     ENABLED: True
     TYPE: "absolute"
     # SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
-    SIZE:  (188, 704)  # kitti 376*1408
+    SIZE:  (376, 704)  # kitti 376*1408
 
 
 DATASETS:
   TRAIN: ('kitti360_instance_seg_train',) 
-  # ("uda_syn_real_instance_seg_train",)
-  #("synscapes_human_cycle_instance_seg_train",)
-  #("synscapes_instance_seg_train",) 
-  #("urbansyn_vehicle_instance_seg_train",)
-  # ("uda_syn_real_vehicle_instance_seg_train",)
-  # ("uda_syn_real_human_cycle_instance_seg_train",)
-  # #("uda_syn_real_instance_seg_train",) 
-  #("urbansyn_vehicle_instance_seg_train",) 
-  #("urbansyn_instance_seg_train",) 
-  # ("uda_syn_real_human_cycle_instance_seg_train",)
   TEST: ("kitti360_instance_seg_val",)
 
 TEST:
   EVAL_PERIOD: 10000
-OUTPUT_DIR: "./output/urbansyn_from_scratch"
-# VIS_PERIOD: 1
+OUTPUT_DIR: "./output/a-kitti/kitti"

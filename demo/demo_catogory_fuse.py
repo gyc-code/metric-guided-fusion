@@ -60,7 +60,7 @@ def get_parser():
     parser.add_argument(
         "--config-file",
         # default="/home/yguo/Documents/other/detectron2/configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
-        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
+        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -94,14 +94,18 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
         default=['MODEL.WEIGHTS','./output/category/synscapes_human_cycle/model_final.pth ./output/category/synscapes_vehicle/model_final.pth'],
+        # default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_final.pth ./output/category/urbansyn_vehicle/model_final.pth'],
+        # default=['MODEL.WEIGHTS','./output/category/synthia_human_cycle/model_final.pth ./output/category/synthia_vehicle/model_final.pth'],
+        
         nargs=argparse.REMAINDER,
     )
     return parser
 
 def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, error_map_save_folder, target, dataset_name='cityscapes'):
     # use PIL, to be consistent with evaluation
-    # print(path)
     path = str(path)
+    print('time:',time.time(), 'processing : ', path, flush=True)
+    
     basename, pred_txt, file_name = get_names(path, dataset_name, result_save_folder)
     mask_img, visual_pred, error_map_filename = None, None, None
     # print('path of img is : ', path)
@@ -179,7 +183,7 @@ if __name__ == "__main__":
         for i in range(len(inputs)):
             paramers.append((inputs[i], demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, target, dataset_name))
         # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
-        pool = mp.Pool(processes=5)
+        pool = mp.Pool(processes=2)
         pool.starmap(process_one, paramers)
     
     if EVAL:

@@ -136,7 +136,7 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
         # we support the no-argument way only as the groundTruthImgList should contain paths to both semantic and confidence maps
         
         # args.groundTruthListFile = os.path.join(args.kitti360Path, 'data_2d_semantics', 'train', '2013_05_28_drive_val_frames.txt')
-        groundTruthListFile = '/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/2013_05_28_drive_val_frames.txt'
+        groundTruthListFile = '/home/yguo/Documents/other/UDA4Inst/datasets/kitti360/2013_05_28_drive_val_frames_all.txt'
         # use the ground truth search string specified above
         groundTruthImgList = kitti360_eval.getGroundTruth(groundTruthListFile)
         if not groundTruthImgList:

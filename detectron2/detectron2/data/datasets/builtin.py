@@ -211,7 +211,7 @@ _RAW_CITYSCAPES_SPLITS = {
     "cityscapes_fine_{task}_test": ("cityscapes/leftImg8bit/test/", "cityscapes/gtFine/test/"),
     
     "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
-    "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image.txt", "kitti360/2013_05_28_drive_val_frames_label.txt"),
+    "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image_all.txt", "kitti360/2013_05_28_drive_val_frames_label_all.txt"),
 }
 
 
@@ -222,6 +222,7 @@ def register_all_cityscapes(root):
         gt_dir = os.path.join(root, gt_dir)
 
         inst_key = key.format(task="instance_seg")
+        data_name = key.split('_')[0]
         if 'cityscapes' in  inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
@@ -249,22 +250,22 @@ def register_all_cityscapes(root):
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
-                    lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, inst_key=inst_key, category='human_cycle', from_json=True, to_polygons=True
+                    lambda x=image_dir, y=gt_dir, data_name=data_name: load_urbansyn_instances(
+                        x, y, data_name=data_name, category='human_cycle', from_json=True, to_polygons=True
                     ),
                 )
             elif '_vehicle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
-                    lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, inst_key=inst_key, category='vehicle', from_json=True, to_polygons=True
+                    lambda x=image_dir, y=gt_dir, data_name=data_name: load_urbansyn_instances(
+                        x, y, data_name=data_name,category='vehicle', from_json=True, to_polygons=True
                     ),
                 )
             else:
                 DatasetCatalog.register(
                     inst_key,
-                    lambda x=image_dir, y=gt_dir: load_urbansyn_instances(
-                        x, y, inst_key=inst_key, category='human_cycle_vehicle', from_json=True, to_polygons=True
+                    lambda x=image_dir, y=gt_dir, data_name=data_name: load_urbansyn_instances(
+                        x, y, data_name=data_name, category='human_cycle_vehicle', from_json=True, to_polygons=True
                     ),
                 )
 

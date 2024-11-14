@@ -52,7 +52,7 @@ def _get_cityscapes_files(image_dir, gt_dir):
     return files
 
 
-def _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key):
+def _get_cityscapes_files_from_filelist(image_dir, gt_dir, data_name):
     files = []
     with open(image_dir,'r') as f:
         images = [line.rstrip().split(' ') for line in f.readlines()]
@@ -61,7 +61,7 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key):
     for idx, image in enumerate(images):
         instance_file = labels[idx][0]
         # if "_gtFine_instanceIds.png" in label_file:
-        if 'kitti360' in inst_key:
+        if 'kitti360' in data_name:
             # KITTI360/data_2d_semantics/train/2013_05_28_drive_0005_sync/image_00/instance/0000006449.png
             # kitti360/polygon/2013_05_28_drive_0005_sync_image_00_instance_0000004472_gtFine_polygons.json
             parts = instance_file.split('/')
@@ -70,27 +70,27 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key):
             files.append((image[0], None, None, json_file))   
         else:
             # instance_file = label_file
-            label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
-            json_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_polygons.json")
-            files.append((image[0], instance_file, label_file, json_file))
+            # label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
+            json_file = instance_file.replace("_gtFine_labelIds.png", "_gtFine_polygons.json")
+            files.append((image[0], None, None, json_file))
     
     assert len(files), "No images found in {}".format(image_dir)
-    for f in files[0]:
-        if 'kitti360' in inst_key:
-            continue
-        assert PathManager.isfile(f), f
+    # for f in files[0]:
+    #     if 'kitti360' in data_name:
+    #         continue
+    #     assert PathManager.isfile(f), f
     return files
 
 
 
-def _get_files(image_dir, gt_dir, inst_key, from_json=True, to_polygons=True):
+def _get_files(image_dir, gt_dir, data_name, from_json=True, to_polygons=True):
     if from_json:
         assert to_polygons, (
             "urbansyn's json annotations are in polygon format. "
             "Converting to mask format is not supported now."
         )
     if os.path.isfile(image_dir) and  os.path.isfile(gt_dir):
-        files = _get_cityscapes_files_from_filelist(image_dir, gt_dir, inst_key)
+        files = _get_cityscapes_files_from_filelist(image_dir, gt_dir, data_name)
         return files
     elif os.path.isdir(image_dir) and  os.path.isdir(gt_dir):
         files = _get_cityscapes_files(image_dir, gt_dir) # original
@@ -110,7 +110,7 @@ def _process_ret_dataset_id_to_contiguous_id(ret):
             anno["category_id"] = dataset_id_to_contiguous_id[anno["category_id"]]
     return ret
 
-def load_urbansyn_instances(image_dir, gt_dir, inst_key, category='human_cycle_vehicle', from_json=True, to_polygons=True):
+def load_urbansyn_instances(image_dir, gt_dir, data_name, category='human_cycle_vehicle', from_json=True, to_polygons=True):
     """
     Args:
         image_dir (str): path to the raw dataset. e.g., "~/cityscapes/leftImg8bit/train".
@@ -124,12 +124,14 @@ def load_urbansyn_instances(image_dir, gt_dir, inst_key, category='human_cycle_v
         list[dict]: a list of dicts in Detectron2 standard format. (See
         `Using Custom Datasets </tutorials/datasets.html>`_ )
     """
-    files = _get_files(image_dir, gt_dir, inst_key, from_json=True, to_polygons=True)
+    files = _get_files(image_dir, gt_dir, data_name, from_json=True, to_polygons=True)
     if files is None:
         return
-    logger.info("Preprocessing urbansyn annotations ...")
+    logger.info("Preprocessing annotations ...")
     # This is still not fast: all workers will execute duplicate works and will
     # take up to 10m on a 8GPU server.
+    # debug
+    _urbansyn_files_to_dict(files[0], category, from_json=from_json, to_polygons=to_polygons)
     pool = mp.Pool(processes=max(mp.cpu_count() // get_world_size() // 2, 4))
     ret = pool.map(
         functools.partial(_urbansyn_files_to_dict, category=category, from_json=from_json, to_polygons=to_polygons),
