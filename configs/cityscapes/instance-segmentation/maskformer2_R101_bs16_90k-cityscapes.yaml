@@ -20,26 +20,23 @@ SOLVER:
 
 
 INPUT:
-  # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 376) for x in range(5, 21)]"] #(5, 21) # kitti 376*1408
-
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
   MIN_SIZE_TRAIN_SAMPLING: "choice"
-  MIN_SIZE_TEST: 376
-  MAX_SIZE_TRAIN: 1504 # kitti 376*4
-  MAX_SIZE_TEST: 752 # kitti 376*2
+  MIN_SIZE_TEST: 1024
+  MAX_SIZE_TRAIN: 4096 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
+  MAX_SIZE_TEST: 2048
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    # SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
-    SIZE:  (376, 704)  # kitti 376*1408
+    SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
 
 
 DATASETS:
   # TRAIN: ('kitti360_instance_seg_train',) 
-  TRAIN: ('synthia_instance_seg_train_eval_kitti360',) 
+  TRAIN: ('synthia_instance_seg_traine_val_cityscapes',) 
 
-  TEST: ("kitti360_instance_seg_val",)
+  TEST: ("cityscapes_fine_instance_seg_val",)
 
 TEST:
-  EVAL_PERIOD: 40000
+  EVAL_PERIOD: 10000
 OUTPUT_DIR: "./output/a_kitti_r101/kitti"

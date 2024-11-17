@@ -176,35 +176,31 @@ def register_all_lvis(root):
 
 # ==== Predefined splits for raw cityscapes images ===========
 _RAW_CITYSCAPES_SPLITS = {
-    "urbansyn_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
-    "synscapes_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
-    # "urbansyn_synscapes_{task}_train": ("img_3time_urban_synscapes_instance.txt", "label_3time_urban_synscapes_instance.txt"),
+    ######### key for eval on cityscapes
+    "urbansyn_{task}_train_eval_cityscapes": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "synscapes_{task}_train_eval_cityscapes": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    "synthia_{task}_train_eval_cityscapes": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "urbansyn_human_cycle_{task}_train_eval_cityscapes": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "urbansyn_vehicle_{task}_train_eval_cityscapes": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "synthia_human_cycle_{task}_train_eval_cityscapes": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "synthia_vehicle_{task}_train_eval_cityscapes": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "synscapes_human_cycle_{task}_train_eval_cityscapes": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    "synscapes_vehicle_{task}_train_eval_cityscapes": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    ######### key for eval on cityscapes
 
-    "urbansyn_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
-    "urbansyn_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
-
-    "urbansyn_category_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
-    "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
-    "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),
-    "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),   
-    "urbansyn_full_category_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
-
-    "synscapes_category_human_cycle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
-    "synscapes_category_vehicle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
-    "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
-
-    "synthia_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-    "synthia_human_cycle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-    "synthia_vehicle_{task}_train": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-
-    "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
-    "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
-    "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    ######### key for eval on kitti360
+    "urbansyn_{task}_train_eval_kitti360": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "synscapes_{task}_train_eval_kitti360": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    "synthia_{task}_train_eval_kitti360": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "urbansyn_human_cycle_{task}_train_eval_kitti360": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "urbansyn_vehicle_{task}_train_eval_kitti360": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "synthia_human_cycle_{task}_train_eval_kitti360": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "synthia_vehicle_{task}_train_eval_kitti360": ("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "synscapes_human_cycle_{task}_train_eval_kitti360": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    "synscapes_vehicle_{task}_train_eval_kitti360": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
+    ######### key for eval on kitti360
     
     
-    "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
-    "cityscapes_fine_category_human_cycle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
-
     "cityscapes_fine_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
     # "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val_void255/"),
     "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val/"),
@@ -212,6 +208,24 @@ _RAW_CITYSCAPES_SPLITS = {
     
     "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
     "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image_all.txt", "kitti360/2013_05_28_drive_val_frames_label_all.txt"),
+    
+    
+    
+    ######### for category experiments, keep
+    # "urbansyn_category_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+    # "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+    # "urbansyn_category_vehicle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),
+    # "urbansyn_category_human_cycle_{task}_val": ("urbansyn_total_label/img_urbansyn_instance_category_val.txt", "urbansyn_total_label/label_urbansyn_instance_category_val.txt"),   
+    # "urbansyn_full_category_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
+    # "synscapes_category_human_cycle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    # "synscapes_category_vehicle_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    # "synscapes_full_category_{task}_train": ("synscapes/category_img_synscapes_instance_train.txt", "synscapes/category_label_synscapes_instance_train.txt"),
+    # "synthia_category_human_cycle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    # "synthia_category_vehicle_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    # "synthia_full_category_{task}_train": ("synthia/category_img_synthia_instance_train.txt", "synthia/category_label_synthia_instance_train.txt"),
+    # "cityscapes_fine_category_vehicle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
+    # "cityscapes_fine_category_human_cycle_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
+    ######### for category experiments
 }
 
 
@@ -269,9 +283,14 @@ def register_all_cityscapes(root):
                     ),
                 )
 
-        MetadataCatalog.get(inst_key).set(
-            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="kitti360_instance", **meta  #"cityscapes_instance"  cityscapes_instance2sem_seg
-        )
+        if 'kitti360' in  inst_key:
+            MetadataCatalog.get(inst_key).set(
+                image_dir=image_dir, gt_dir=gt_dir, evaluator_type="kitti360_instance", **meta  #"cityscapes_instance"  cityscapes_instance2sem_seg
+            )
+        else 'cityscapes' in  inst_key:
+            MetadataCatalog.get(inst_key).set(
+                image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_instance", **meta 
+            )
 
         sem_key = key.format(task="sem_seg")
         DatasetCatalog.register(

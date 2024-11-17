@@ -21,7 +21,7 @@ MODEL:
     NUM_OBJECT_QUERIES: 200
 SOLVER:
   IMS_PER_BATCH: 6
-  CHECKPOINT_PERIOD: 90000
+  CHECKPOINT_PERIOD: 39999
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
   BASE_LR: 0.0001
@@ -44,9 +44,9 @@ INPUT:
 
 
 DATASETS:
-  TRAIN: ('kitti360_instance_seg_train',) 
+  TRAIN: ('kitti360_instance_seg_train_eval_kitti360',) 
   TEST: ("kitti360_instance_seg_val",)
 
 TEST:
-  EVAL_PERIOD: 10000
+  EVAL_PERIOD: 40000
 OUTPUT_DIR: "./output/a-kitti/kitti"

@@ -71,7 +71,8 @@ def _get_cityscapes_files_from_filelist(image_dir, gt_dir, data_name):
         else:
             # instance_file = label_file
             # label_file = instance_file.replace("_gtFine_instanceIds.png", "_gtFine_labelIds.png")
-            json_file = instance_file.replace("_gtFine_labelIds.png", "_gtFine_polygons.json")
+            json_file = instance_file.split('_gtFine_')[0] + "_gtFine_polygons.json"
+            # json_file = instance_file.replace("_gtFine_labelIds.png", "_gtFine_polygons.json")
             files.append((image[0], None, None, json_file))
     
     assert len(files), "No images found in {}".format(image_dir)
