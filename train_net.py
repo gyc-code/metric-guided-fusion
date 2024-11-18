@@ -36,6 +36,7 @@ from detectron2.engine import (
 )
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
+    Kitti360InstanceEvaluator,
     CityscapesSemSegEvaluator,
     CityscapesInstance2SemSegEvaluator,
     COCOEvaluator,
@@ -122,6 +123,11 @@ class Trainer(DefaultTrainer):
                 torch.cuda.device_count() > comm.get_rank()
             ), "CityscapesEvaluator currently do not work with multiple machines."
             return CityscapesInstanceEvaluator(dataset_name)
+        if evaluator_type == "kitti360_instance":
+            assert (
+                torch.cuda.device_count() > comm.get_rank()
+            ), "Kitti360InstanceEvaluator currently do not work with multiple machines."
+            return Kitti360InstanceEvaluator(dataset_name)
         if evaluator_type == "cityscapes_sem_seg":
             assert (
                 torch.cuda.device_count() > comm.get_rank()
