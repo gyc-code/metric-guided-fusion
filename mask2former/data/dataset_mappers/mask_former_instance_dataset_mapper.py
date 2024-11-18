@@ -256,18 +256,18 @@ class MaskFormerInstanceDatasetMapper:
                 image = aug_input.image
 
                 # introduce depth label
-                depth_map = self.__get_depth_information__(dataset_dict, transforms, data_key)
+                # depth_map = self.__get_depth_information__(dataset_dict, transforms, data_key)
                 
                 template_mask = self.__process_template_for_target__(transforms)
-                far_region_image, far_region_transforms, far_region, crop_info = self.__get_far_region__(depth_map, transforms, dataset_dict, data_key, image)
-                far_region_image = torch.as_tensor(np.ascontiguousarray(far_region_image.transpose(2, 0, 1)))
+                # far_region_image, far_region_transforms, far_region, crop_info = self.__get_far_region__(depth_map, transforms, dataset_dict, data_key, image)
+                # far_region_image = torch.as_tensor(np.ascontiguousarray(far_region_image.transpose(2, 0, 1)))
 
                 if data_key == "source":
                     # transform instance masks
-                    dataset_dict_bp = copy.deepcopy(dataset_dict)
+                    # dataset_dict_bp = copy.deepcopy(dataset_dict)
                     annos, masks = self.__transform_annotation__(transforms, dataset_dict, data_key, image)
-                    far_region_annos, far_region_masks = self.__transform_annotation__(far_region_transforms, dataset_dict_bp, data_key, far_region_image)
-                    far_region_masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in far_region_masks]
+                    # far_region_annos, far_region_masks = self.__transform_annotation__(far_region_transforms, dataset_dict_bp, data_key, far_region_image)
+                    # far_region_masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in far_region_masks]
                     masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in masks]
 
                 image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
@@ -281,12 +281,12 @@ class MaskFormerInstanceDatasetMapper:
                     ]
                     # pad image
                     image = F.pad(image, padding_size, value=128).contiguous()
-                    depth_map = F.pad(depth_map, padding_size, value=128).contiguous()
-                    far_region_image = F.pad(far_region_image, padding_size, value=128).contiguous()
+                    # depth_map = F.pad(depth_map, padding_size, value=128).contiguous()
+                    # far_region_image = F.pad(far_region_image, padding_size, value=128).contiguous()
                     if data_key == "source":
                         # pad mask
                         masks = [F.pad(x, padding_size, value=0).contiguous() for x in masks]
-                        far_region_masks = [F.pad(x, padding_size, value=0).contiguous() for x in far_region_masks]
+                        # far_region_masks = [F.pad(x, padding_size, value=0).contiguous() for x in far_region_masks]
                     else:
                         template_mask = F.pad(template_mask, padding_size, value=128).contiguous()
 
@@ -295,15 +295,15 @@ class MaskFormerInstanceDatasetMapper:
                 else:
                     instances = self.__mask_to_instance__(image, annos, masks)
                     dataset_dict[data_key]["instances"] = instances
-                    far_region_instances = self.__mask_to_instance__(far_region_image, far_region_annos, far_region_masks)
-                    dataset_dict[data_key]["far_region_instances"] = far_region_instances
-                if 0:
-                    self.visulise(far_region_image, image, depth_map, far_region, dataset_dict[data_key]["file_name"])
+                    # far_region_instances = self.__mask_to_instance__(far_region_image, far_region_annos, far_region_masks)
+                    # dataset_dict[data_key]["far_region_instances"] = far_region_instances
+                # if 0:
+                    # self.visulise(far_region_image, image, depth_map, far_region, dataset_dict[data_key]["file_name"])
 
                 dataset_dict[data_key]["image"] = image
-                dataset_dict[data_key]['depth'] = depth_map
-                dataset_dict[data_key]["far_region_image"] = far_region_image
-                dataset_dict[data_key]['crop_information'] = crop_info
+                # dataset_dict[data_key]['depth'] = depth_map
+                # dataset_dict[data_key]["far_region_image"] = far_region_image
+                # dataset_dict[data_key]['crop_information'] = crop_info
         else:
             image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
             utils.check_image_size(dataset_dict, image)
