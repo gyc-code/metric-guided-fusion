@@ -195,7 +195,6 @@ class MSDeformAttnPixelDecoder(nn.Module):
         transformer_input_shape = {
             k: v for k, v in input_shape.items() if k in transformer_in_features
         }
-
         # this is the input shape of pixel decoder
         input_shape = sorted(input_shape.items(), key=lambda x: x[1].stride)
         self.in_features = [k for k, v in input_shape]  # starting from "res2" to "res5"
@@ -320,7 +319,6 @@ class MSDeformAttnPixelDecoder(nn.Module):
             x = features[f].float()  # deformable detr does not support half precision
             srcs.append(self.input_proj[idx](x))
             pos.append(self.pe_layer(x))
-
         y, spatial_shapes, level_start_index = self.transformer(srcs, pos)
         bs = y.shape[0]
 

@@ -83,8 +83,8 @@ class MaskFormerSemanticDatasetMapper:
 
         # Assume always applies to the training set.
         dataset_names = cfg.DATASETS.TRAIN
-        meta = MetadataCatalog.get(dataset_names[0])
-        ignore_label = meta.ignore_label
+        #meta = MetadataCatalog.get(dataset_names[0])
+        ignore_label = cfg.MODEL.SEM_SEG_HEAD.IGNORE_VALUE
 
         ret = {
             "is_train": is_train,
@@ -111,7 +111,7 @@ class MaskFormerSemanticDatasetMapper:
 
         if "sem_seg_file_name" in dataset_dict:
             # PyTorch transformation not implemented for uint16, so converting it to double first
-            sem_seg_gt = utils.read_image(dataset_dict.pop("sem_seg_file_name")).astype("double")
+            sem_seg_gt = utils.read_image(dataset_dict.pop("sem_seg_file_name"), "L").squeeze(2).astype("double")
         else:
             sem_seg_gt = None
 

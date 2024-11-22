@@ -100,6 +100,8 @@ class MaskFormer(nn.Module):
     @classmethod
     def from_config(cls, cfg):
         backbone = build_backbone(cfg)
+        if cfg.MODEL.MASK_FORMER.FROZE_BACKBONE:
+            backbone.freeze_backbone()
         sem_seg_head = build_sem_seg_head(cfg, backbone.output_shape())
 
         # Loss parameters:

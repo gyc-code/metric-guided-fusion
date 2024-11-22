@@ -58,6 +58,7 @@ def add_maskformer2_config(cfg):
     cfg.MODEL.MASK_FORMER.TEST.OBJECT_MASK_THRESHOLD = 0.0
     cfg.MODEL.MASK_FORMER.TEST.OVERLAP_THRESHOLD = 0.0
     cfg.MODEL.MASK_FORMER.TEST.SEM_SEG_POSTPROCESSING_BEFORE_INFERENCE = False
+    cfg.MODEL.MASK_FORMER.FROZE_BACKBONE = False
 
     # Sometimes `backbone.size_divisibility` is set to 0 for some backbone (e.g. ResNet)
     # you can use this config to override
@@ -89,6 +90,22 @@ def add_maskformer2_config(cfg):
     cfg.MODEL.SWIN.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
     cfg.MODEL.SWIN.USE_CHECKPOINT = False
 
+    # DinoV2 backbone
+    cfg.MODEL.DINOV2 = CN()
+    cfg.MODEL.DINOV2.PRETRAIN_IMG_SIZE = 512
+    cfg.MODEL.DINOV2.PATCH_SIZE = 16
+    cfg.MODEL.DINOV2.EMBED_DIM = 1024
+    cfg.MODEL.DINOV2.DEPTHS = 24
+    cfg.MODEL.DINOV2.NUM_HEADS = 16
+    cfg.MODEL.DINOV2.MLP_RATIO = 4
+    cfg.MODEL.DINOV2.QKV_BIAS = True
+    cfg.MODEL.DINOV2.FFN_BIAS = True
+    cfg.MODEL.DINOV2.PROJ_BIAS = True
+    cfg.MODEL.DINOV2.INIT_VALUES = 1e-05
+    cfg.MODEL.DINOV2.FFN_LAYER = "mlp"
+    cfg.MODEL.DINOV2.BLOCK_CHUNKS = 0
+    cfg.MODEL.DINOV2.FREEZE_AT = None
+
     # NOTE: maskformer2 extra configs
     # transformer module
     cfg.MODEL.MASK_FORMER.TRANSFORMER_DECODER_NAME = "MultiScaleMaskedTransformerDecoder"
@@ -112,3 +129,5 @@ def add_maskformer2_config(cfg):
     # Importance sampling parameter for PointRend point sampling during training. Parametr `beta` in
     # the original paper.
     cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO = 0.75
+
+

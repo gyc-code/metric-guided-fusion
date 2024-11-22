@@ -698,7 +698,7 @@ class AMPTrainer(SimpleTrainer):
 
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()
-            with autocast(dtype=self.precision):
+            with autocast():
                 loss_dict = self.model(data)
                 if isinstance(loss_dict, torch.Tensor):
                     losses = loss_dict

@@ -113,6 +113,7 @@ def load_urbansyn_instances(image_dir, gt_dir, category='human_cycle_vehicle', f
         list[dict]: a list of dicts in Detectron2 standard format. (See
         `Using Custom Datasets </tutorials/datasets.html>`_ )
     """
+
     files = _get_files(image_dir, gt_dir, from_json=True, to_polygons=True)
     if files is None:
         return
@@ -403,7 +404,6 @@ def _urbansyn_files_to_dict(files, category, from_json, to_polygons):
 
     if from_json:
         from shapely.geometry import MultiPolygon, Polygon
-
         with PathManager.open(json_file, "r") as f:
             jsonobj = json.load(f)
         ret = {

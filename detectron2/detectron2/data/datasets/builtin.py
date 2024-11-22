@@ -176,7 +176,7 @@ def register_all_lvis(root):
 
 # ==== Predefined splits for raw cityscapes images ===========
 _RAW_CITYSCAPES_SPLITS = {
-    "urbansyn_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"),
+    "urbansyn_{task}_train": ("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), #"/home/yguo/Documents/other/inst_seg_4VFM/label_urbansyn_instance_json.txt"),
     "synscapes_{task}_train": ("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"),
     # "urbansyn_synscapes_{task}_train": ("img_3time_urban_synscapes_instance.txt", "label_3time_urban_synscapes_instance.txt"),
 
