@@ -182,7 +182,10 @@ class MaskFormerInstanceDatasetMapper:
                 # print(t.__class__.__name__)
                 if 'Color' in t.__class__.__name__:
                     continue
+                if 'Resize' in t.__class__.__name__:
+                    t.h, t.w = template_mask.shape[:2]
                 template_mask = t.apply_image(template_mask)
+                
             template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
             return template_mask
 

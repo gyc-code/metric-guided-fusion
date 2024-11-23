@@ -424,7 +424,7 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
         
         ''' mix the image'''
-        if instance_size > 1000000000: #5000
+        if instance_size > 3000: #5000
             ''' instance-wise mix'''
             for c in range(3):
                 source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]

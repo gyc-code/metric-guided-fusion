@@ -13,7 +13,7 @@ MODEL:
     PRETRAIN_IMG_SIZE: 384
   WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
   # WEIGHTS: "./pretrain/glip_large_model.pth"
-  # WEIGHTS: "./output/a_category_4UDA_swinL/cs_urbansyn_human_cycle/model_final.pth"
+  # WEIGHTS: "./output/a_category_4UDA_swinL/cs_synthia_human_cycle/model_final.pth"
   #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   ##  #"swin_large_patch4_window12_384_22k.pkl"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
@@ -30,7 +30,7 @@ SOLVER:
 
 
 INPUT:
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(10, 25)]"] #(5, 21), for (5, 10) urbansyn, (10, 25)for synthia synscapes
   MIN_SIZE_TRAIN_SAMPLING: "choice"
   MIN_SIZE_TEST: 1024
   MAX_SIZE_TRAIN: 4096 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
@@ -38,10 +38,10 @@ INPUT:
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
+    SIZE:  (512, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
 
 DATASETS:
-  TRAIN: ('uda_urbansyn_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
+  TRAIN: ('uda_synthia_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
   # ("uda_syn_real_instance_seg_train_eval_cityscapes",)
   #("synscapes_human_cycle_instance_seg_train_eval_cityscapes",)
   #("synscapes_instance_seg_train_eval_cityscapes",) 
@@ -54,6 +54,6 @@ DATASETS:
   # ("uda_syn_real_human_cycle_instance_seg_train_eval_cityscapes",)
   TEST: ("cityscapes_fine_instance_seg_val",)
 TEST:
-  EVAL_PERIOD: 40000
+  EVAL_PERIOD: 5000
 OUTPUT_DIR: "./output/test"
 # VIS_PERIOD: 1
