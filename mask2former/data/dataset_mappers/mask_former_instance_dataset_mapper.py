@@ -172,16 +172,19 @@ class MaskFormerInstanceDatasetMapper:
             depth_map = t.apply_image(depth_map)
         return depth_map
 
-    def __process_template_for_target__(self, transforms):
+    def __process_template_for_target__(self, transforms, dataset_dict):
         ''' make template image for target'''
-        template_mask = utils.read_image('template/cityscapes_ego_car_template.png', format=self.img_format)
-        for index, t in enumerate(transforms):
-            # print(t.__class__.__name__)
-            if 'Color' in t.__class__.__name__:
-                continue
-            template_mask = t.apply_image(template_mask)
-        template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
-        return template_mask
+        if "/KITTI360/" in dataset_dict["target"]["file_name"]:
+            return None
+        else:
+            template_mask = utils.read_image('template/cityscapes_ego_car_template.png', format=self.img_format)
+            for index, t in enumerate(transforms):
+                # print(t.__class__.__name__)
+                if 'Color' in t.__class__.__name__:
+                    continue
+                template_mask = t.apply_image(template_mask)
+            template_mask = torch.as_tensor(np.ascontiguousarray(template_mask.transpose(2, 0, 1)))
+            return template_mask
 
     def __get_far_region__(self, depth_map, transforms, dataset_dict, data_key, image):
         # for street, more far away place is in the smaller row. the max row is the boundry to cut. here we need to find max_row_index, mean_col_index
@@ -257,8 +260,7 @@ class MaskFormerInstanceDatasetMapper:
 
                 # introduce depth label
                 # depth_map = self.__get_depth_information__(dataset_dict, transforms, data_key)
-                
-                template_mask = self.__process_template_for_target__(transforms)
+                template_mask = self.__process_template_for_target__(transforms, dataset_dict)
                 # far_region_image, far_region_transforms, far_region, crop_info = self.__get_far_region__(depth_map, transforms, dataset_dict, data_key, image)
                 # far_region_image = torch.as_tensor(np.ascontiguousarray(far_region_image.transpose(2, 0, 1)))
 
@@ -288,7 +290,8 @@ class MaskFormerInstanceDatasetMapper:
                         masks = [F.pad(x, padding_size, value=0).contiguous() for x in masks]
                         # far_region_masks = [F.pad(x, padding_size, value=0).contiguous() for x in far_region_masks]
                     else:
-                        template_mask = F.pad(template_mask, padding_size, value=128).contiguous()
+                        if template_mask is not None:
+                            template_mask = F.pad(template_mask, padding_size, value=128).contiguous()
 
                 if data_key == "target":
                     dataset_dict["target"]['template_img'] = template_mask

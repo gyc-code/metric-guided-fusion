@@ -343,36 +343,34 @@ _RAW_UDA_CITYSCAPES_SPLITS = {
     #########  for eval on kitti360
     "uda_syn_real_{task}_train_eval_kitti360": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
-        # 'source':("img_3time_urban_synscapes_instance.txt", "label_3time_urban_synscapes_instance.txt"), 
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
-        # 'target':("cityscapes/leftimage8bit_train_small.txt", "cityscapes/gtFine_train_small.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
 
         },
     "uda_urbansyn_syn_real_human_cycle_{task}_train_eval_kitti360": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
     "uda_urbansyn_syn_real_vehicle_{task}_train_eval_kitti360": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
 
     "uda_synscapes_syn_real_human_cycle_{task}_train_eval_kitti360": {
         'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
     "uda_synscapes_syn_real_vehicle_{task}_train_eval_kitti360": {
         'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
     
     "uda_synthia_syn_real_human_cycle_{task}_train_eval_kitti360": {
         'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
     "uda_synthia_syn_real_vehicle_{task}_train_eval_kitti360": {
         'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
 }
 

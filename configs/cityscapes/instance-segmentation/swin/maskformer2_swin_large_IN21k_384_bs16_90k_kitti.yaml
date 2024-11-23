@@ -11,8 +11,8 @@ MODEL:
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
-  WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
-  # WEIGHTS: "./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth"
+  # WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
+  WEIGHTS: "./output/a_category_4UDA_swinL/kitti_urbansyn_human_cycle/model_final.pth"
   #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   ##  #"swin_large_patch4_window12_384_22k.pkl"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
@@ -20,8 +20,8 @@ MODEL:
   MASK_FORMER:
     NUM_OBJECT_QUERIES: 200
 SOLVER:
-  IMS_PER_BATCH: 6
-  CHECKPOINT_PERIOD: 39999
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 40000
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
   BASE_LR: 0.0001
@@ -30,21 +30,23 @@ SOLVER:
 
 INPUT:
   # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21)
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 376) for x in range(5, 21)]"] #(5, 21) # kitti 376*1408
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 376) for x in range(11, 21)]"] #(5, 21) # kitti 376*1408
 
   MIN_SIZE_TRAIN_SAMPLING: "choice"
-  MIN_SIZE_TEST: 376
+  MIN_SIZE_TEST: 384 #376
   MAX_SIZE_TRAIN: 1504 # kitti 376*4
   MAX_SIZE_TEST: 752 # kitti 376*2
   CROP:
     ENABLED: True
     TYPE: "absolute"
     # SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
-    SIZE:  (376, 704)  # kitti 376*1408
+    # SIZE:  (376, 704)  # kitti 376*1408
+    SIZE:  (384, 672)  # kitti 376*1408, for model inference , size need to be size_divisibility(32),376 most close to 384 for divede/32, 672 most down close to 704 for divide/32
+
 
 
 DATASETS:
-  TRAIN: ('kitti360_instance_seg_train_eval_kitti360',) 
+  TRAIN: ('uda_urbansyn_syn_real_human_cycle_instance_seg_train_eval_kitti360',) 
   TEST: ("kitti360_instance_seg_val",)
 
 TEST:

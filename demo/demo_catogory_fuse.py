@@ -197,3 +197,4 @@ if __name__ == "__main__":
         if 1:
             _temp_dir = result_save_folder
             evaluate_kitti(_temp_dir)
+        shutil.rmtree(result_save_folder)

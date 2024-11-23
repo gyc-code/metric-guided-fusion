@@ -48,7 +48,7 @@ from utils import *
 # constants
 
 EVAL=True
-VISUAL = False
+VISUAL = True
 ONLY_VAL = False
 
 
@@ -83,7 +83,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category_kitti/test/',
+        default='visual_instance/category_kitti/test_1123/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -100,7 +100,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/urbansyn_full/model_final.pth'],
-        default=['MODEL.WEIGHTS','./output/category/synthia_full/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/a_category_4UDA_swinL/kitti_urbansyn_human_cycle/model_final.pth'],
         
         
         nargs=argparse.REMAINDER,
@@ -188,3 +188,5 @@ if __name__ == "__main__":
             # eval on kitti
             _temp_dir = result_save_folder
             evaluate_kitti(_temp_dir)
+        shutil.rmtree(result_save_folder)
+        

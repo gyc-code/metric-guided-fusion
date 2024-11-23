@@ -42,7 +42,7 @@ Source_coefficients = None
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
 RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
 # RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR THIS
-# RARE_CLASS_NAMES = [4, 6] # for synthia, bus is 4,  motor is 6
+# RARE_CLASS_NAMES = [5, 6] # for kitti360, bus is 4,  train is 6
 
 def translated_obj_mask(obj_mask,image, dx=50,dy=50):
     ''' dx control col, dy control row,dy > 0, move down, dx > 0, move right'''
@@ -93,13 +93,17 @@ def remove_occlussion(base_instances, pasted_instances):
 
 def remove_ego_car_logo(pseudo_instance, template):
     ''' design for cityscapes, crop 1024*1024, remove pseudo label which is ego car head and logo'''
+
     if len(pseudo_instance._fields) == 0:
         return
+    if template is None:
+        return pseudo_instance
     white_mask = template >= 20
     white_mask = (white_mask*1)[0, :, :]
     pred_masks = pseudo_instance.pred_masks
     if len(pred_masks) == 0:
         return
+
     ''' process every mask , if one mask is covered totally by template, remove it and its score and label'''
     indices_to_remove = []
     for i, mask in enumerate(pred_masks):
@@ -109,9 +113,6 @@ def remove_ego_car_logo(pseudo_instance, template):
         ''' mask:1 is area of instance, white_mask 1 is not ego car log, 0 is logo, 
         if mask is in white_mask, multipy makes it 0.'''
         template_apply_mask = mask * white_mask.cuda()
-        # cv2.imwrite(str(i) + '_.png', template_apply_mask.cpu().numpy())
-        # rows, cols = np.where(mask.cpu().numpy() > 0 )
-        # center_row = 0.5*(rows.max() - rows.min()) + rows.min()
         template_apply_mask_area = template_apply_mask.sum().item()
         if (template_apply_mask_area/mask_area) < 0.2:
             indices_to_remove.append(i)
@@ -277,7 +278,7 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
         gt_color_instances = visulize_color_instances(gt_instance)
 
-    gt_instance_select = Instances((hs, ws))
+    # gt_instance_select = Instances((hs, ws))
     THIS_FRAME_HAS_RARE_CLASSES = False
     keep = torch.ones(len(gt_instance), dtype=torch.bool)
     for i, obj_mask in enumerate(gt_masks):
