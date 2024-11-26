@@ -537,77 +537,6 @@ class AMPTrainer(SimpleTrainer):
             for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
                 ema_param.data.mul_(alpha_teacher).add_(param.data, alpha=1 - alpha_teacher)
 
-
-    # def second_pseudo_labels_far_region(self, data, pseudo_labels, index):
-    #     ''' use far region image to generate pseudo label for far region'''
-    #     data_copy_plabel_i = copy.deepcopy(data[index])
-    #     if len(data[index]['target']['crop_information']) > 0:
-    #         '''  try use far image crop to get pseudo label ,
-    #         far crop image 500*200, resize to 2 times to inference, get plabel and
-    #         resize the instance pred_mask to 600*200, paste to the original image shape according crop imformation(x0 y0 x1 y1)'''
-    #         target = data[index]['target']
-    #         # 1. 获取 far_region_image
-    #         far_region_image = target['far_region_image']
-    #         # 2. 将图片放大两倍
-    #         far_region_image = far_region_image.float()
-    #         enlarged_image = F.interpolate(far_region_image.unsqueeze(0), scale_factor=2, mode='bilinear', align_corners=False).squeeze(0)
-    #         file_id = data[index]['target']['image_id'].split('.')[0]
-    #         # 3. 送进 self.ema_model 进行推理
-    #         data_copy_plabel_i['target']['image'] = enlarged_image
-    #         pseudo_labels_second = self.ema_model([data_copy_plabel_i], target=True) #cindy, image size change due to size_divisibility(32)
-    #         # 4. 修改输出结果中的 instance 的 image_height 和 image_width
-    #         pseudo_labels_second_instance = pseudo_labels_second[0]['instances']
-    #         pseudo_labels_second_instance = pseudo_labels_second_instance[pseudo_labels_second_instance.scores.cpu() > 0.8]
-    #         # save_path = self.folder_name + file_id + '_' + str(self.local_iter)+ '_enlarge_image.jpg'
-    #         # # cv2.imwrite(save_path.replace('_enlarge_image.jpg', '_tar_ori.jpg'), enlarged_image.permute(1,2,0).numpy())
-    #         # self.__print_label__(pseudo_labels_second_instance, enlarged_image, save_path)
-
-    #         # 5. 将 instance 的 pred_masks resize 且 pad 回原图
-    #         if len(pseudo_labels_second_instance) > 0:
-    #             pred_masks = pseudo_labels_second_instance.pred_masks
-    #             resized_pred_masks = F.interpolate(pred_masks.unsqueeze(1).float(), size=(far_region_image.shape[1], far_region_image.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
-    #             # 6. 创建空白的 mask，并根据 crop_information 放回对应位置
-    #             crop_info = target['crop_information']
-    #             x0, y0, x1, y1 = crop_info
-    #             final_masks = []
-    #             final_scores = []
-    #             final_classes = []
-    #             for j, resized_pred_mask in enumerate(resized_pred_masks):
-    #                 mask_tmp = torch.zeros((target['image'].shape[1], target['image'].shape[2]), dtype=resized_pred_mask.dtype)
-    #                 keep = self.filter_instances(resized_pred_mask, pseudo_labels[index]['instances'], crop_info, 0.75)
-    #                 if keep is False:
-    #                     continue
-    #                 # 确保 resized_pred_mask 的大小与 crop_info 一致
-    #                 if resized_pred_mask.shape[0] != (y1 - y0) or resized_pred_mask.shape[1] != (x1 - x0):
-    #                     print(f"Error: resized_pred_mask size {resized_pred_mask.shape} does not match crop_info size {(y1 - y0, x1 - x0)}")
-    #                     continue
-    #                 mask_tmp[y0:y1, x0:x1] = resized_pred_mask
-    #                 final_masks.append(mask_tmp)
-    #                 final_scores.append(pseudo_labels_second_instance.scores[j].item())
-    #                 final_classes.append(pseudo_labels_second_instance.pred_classes[j].item())
-
-    #             # 7. 更新 output 中的 pred_masks
-
-    #             if len(final_masks) > 0:
-    #                 final_masks = torch.stack(final_masks).cuda()
-    #                 final_scores = torch.tensor(final_scores).cuda()
-    #                 final_classes = torch.tensor(final_classes).cuda()
-    #                 boxes = torch.tensor(np.zeros((len(final_masks), 4)))
-    #                 ct, ht, wt = data[index]['target']['image'].shape
-    #                 second_ins = Instances((ht, wt))
-    #                 second_ins.pred_classes = final_classes
-    #                 second_ins.pred_masks = final_masks
-    #                 second_ins.scores = final_scores
-    #                 second_ins.pred_boxes = Boxes(boxes)
-    #                 return second_ins
-    #             else:
-    #                 return None
-    #         else:
-    #             return None
-    #     else:
-    #         return None
-
-
     def run_step(self):
         """
         Implement the AMP training logic.
@@ -618,12 +547,12 @@ class AMPTrainer(SimpleTrainer):
         start = time.perf_counter()
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
+        print('time for loading :', data_time)
         self.local_iter += 1
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             
             batch_size = len(data)
             assert batch_size == 3, f"Batch size must be 3, but got {batch_size}"
-            
             # Init/update ema model
             if self.local_iter == ITERATION_TO_START_UDA + 1:
                 self._init_ema_weights()
@@ -638,43 +567,11 @@ class AMPTrainer(SimpleTrainer):
                 # Generate pseudo-label
                 pseudo_labels = self.ema_model(data, target=True) 
                 pseudo_instances_num_list = []
+                start = time.perf_counter()
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
-                    pseudo_instances = pseudo_labels[i]['instances']
-                    if USE_CLIP:
-                        '''if the score(=class*mask)>0.5,I want to correct the score by CLIP, the class score will be updated by 
-                        CLIP output,and then update the score of the instance'''
-                        pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.5]
-                        correct_label_by_CLIP(pseudo_labels[i]['instances'], data[i]['target']['image'])
-
-                        pseudo_instances.remove('class_scores')
-                        pseudo_instances.remove('mask_scores')
-                        pseudo_instances.remove('scores_8')
-                        # pseudo_instances.scores = pseudo_instances.class_scores * pseudo_instances.mask_scores
-                        
+                    pseudo_instances = pseudo_labels[i]['instances'] 
                     pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
-
-                    if VISUL:
-                        file_id = data[i]['target']['image_id'].split('.')[0]
-                        save_path = self.folder_name + file_id + '_' + str(self.local_iter)+ '_tar.jpg'
-                        self.__print_label__(pseudo_instances, data[i]['target']['image'], save_path)
-                        save_path_1 = self.folder_name + file_id + '_' + str(self.local_iter)+ '_template.jpg'
-                        cv2.imwrite(save_path_1, template_img.permute(1,2,0).numpy().astype(np.uint8))
-
-
-                    '''Add pseudo label mask to filter out the object in image and
-                    do the inference again to get second p label, fuse two p label  -> only get back 1-2 instances'''
-                    ##### Initialize a boolean mask of the same size as the template image
-                    # second_instances = self.second_pseudo_labels_mask_out(data, i)
-                    # second_instances = self.second_pseudo_labels_far_region(data, pseudo_labels, i)
-                    # second_instances = None
-
-                    # if second_instances is not None:
-                    #     fuse_instance = Instances.cat([second_instances, pseudo_labels[i]['instances']])
-                    #     # fuse_instance = second_instances
-                    # else:
-                    #     fuse_instance = pseudo_labels[i]['instances']
-                    #############################################
                     update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
                     if update_pseudo_label is None:
                         pseudo_instances_num_list.append(0)
@@ -684,58 +581,18 @@ class AMPTrainer(SimpleTrainer):
                         pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
                     data[i]['target']['instances'] = pseudo_labels[i]['instances']
                 del pseudo_labels
+                print('time for pseudo label:', time.perf_counter() - start)
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
-                # data_ori_0 = copy.deepcopy(data[0])
-                # data_copy = copy.deepcopy(data)
-                if VISUL:
-                    self.model.eval()
-                    data[0]['source']['height'] = 1024
-                    data[0]['source']['width'] = 1024
-
-                    source = self.model(data)
-                    source_instances = source[0]['instances']
-                    source_instances = source_instances[source_instances.scores.cpu() > 0.8]
-
-                    source_instances_img = visulize_color_instances(source_instances)
-                    file_id = data[0]['target']['image_id'].split('.')[0]
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_source_inference_color_instance.jpg', source_instances_img)
-                    del source, source_instances, source_instances_img
-                   
-                '''since use mini_batch_loss,one batch data=data0: source+ data1: s2t+ data2: t2s
-                data[1] : source_instance_paste_to_target_mix, data[2] :target_instance_paste_to_source_mix
-                batch_size need to be 3'''
+                start = time.perf_counter()
                 if pseudo_instances_num_list[1] > 0:
                     data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], self.local_iter, self.folder_name, self.source_rare_class_samples)
                     # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
                 if pseudo_instances_num_list[2] > 0:
                     data[2] = target_instance_paste_to_source_mix(data[2], self.local_iter, self.folder_name)
+                print('time for mix:', time.perf_counter() - start)
 
-                # if not MINI_BATCH_LOSS: ## cindy: cancle this train
-                #     self.model.training = True
-                #     mix_loss_dict = self.model(data)
-                #     if isinstance(mix_loss_dict, torch.Tensor):
-                #         s2t_mix_losses = mix_loss_dict
-                #         loss_dict = {"total_mix_loss": mix_loss_dict}
-                #     else:
-                #         s2t_mix_losses = sum(mix_loss_dict.values())
-
-                #     ''' cindy: train with target2source mix data '''
-                #     t2s_mix_loss_dict = self.model(data_copy)
-                #     if isinstance(t2s_mix_loss_dict, torch.Tensor):
-                #         t2s_mix_losses = t2s_mix_loss_dict
-                #         loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
-                #     else:
-                #         t2s_mix_losses = sum(t2s_mix_loss_dict.values())
-                #     # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
-                #     # unite_loss = s2t_mix_losses # ablation
-                #     # unite_loss = t2s_mix_losses # ablation
-                #     # unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
-                #     unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
-                #     # unite_loss = t2s_mix_losses
-                #     unite_loss_dict = t2s_mix_loss_dict
-                # else:
                 ''' use mini batch loss ,one batch data=data0: source+ data1: s2t+ data2: t2s '''
                 self.optimizer.zero_grad()
                 self.model.train()
@@ -763,11 +620,6 @@ class AMPTrainer(SimpleTrainer):
         else:
             if 'source' in data[0]: # when local_iter < ITERATION_TO_START_UDA, also use only source training
                 data = [x['source'] for x in data]
-                # for x in data:
-                #     if 0:
-                #     # if random.randint(0, 1):
-                #         x['image'] = x['far_region_image']
-                #         x['instances'] = x['far_region_instances']
 
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()
