@@ -38,7 +38,7 @@ INPUT:
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
+    SIZE:  (1024, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
 
 DATASETS:
   TRAIN: ('uda_synthia_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 

@@ -46,7 +46,7 @@ INPUT:
 
 
 DATASETS:
-  TRAIN: ('uda_urbansyn_syn_real_human_cycle_instance_seg_train_eval_kitti360',) 
+  TRAIN: ('urbansyn_instance_seg_train_eval_kitti360',) 
   TEST: ("kitti360_instance_seg_val",)
 
 TEST:

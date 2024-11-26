@@ -38,6 +38,8 @@ VISUALIZE_POLYGON = False
 visual_iter = 500
 Target_coefficients = None
 Source_coefficients = None
+RARE_CLASS_INSTANCE_WISE = False
+THRESH_instance_PATCH_WISE = 1100000000000 ###1000 # 1000000000  #3000
 
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
 RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
@@ -138,8 +140,16 @@ def rare_class_balance(rare_class_samples, img_to_paste, instance_to_add):
         img = sample['img']
         instance = sample['instance']
         mask = instance.gt_masks[0]
-        for c in range(3):
-            img_to_paste[c,:][mask] = img[c,:][mask]
+        if RARE_CLASS_INSTANCE_WISE:
+            for c in range(3):
+                img_to_paste[c,:][mask] = img[c,:][mask]
+        else:
+            # blend patch-wise mix
+            coords = torch.nonzero(mask)
+            if coords.numel() == 0:
+                continue
+            img_to_paste = patch_wise_mix(mask, coords, img_to_paste, img)
+            
         remove_occlussion(instance_to_add, instance)
         instance_to_add = Instances.cat([instance_to_add, instance])
     if len(rare_class_samples) > 10:# control the canditate number 
@@ -299,7 +309,7 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         if i == 0:
             source_img = torch.from_numpy(cv2.GaussianBlur(source_img.permute(1,2,0).to(torch.uint8).numpy(), (5, 5),0)).permute(2,0,1)
             
-        if instance_size > 1000000000: #5000
+        if instance_size > THRESH_instance_PATCH_WISE: #5000
             ''' instance-wise mix'''
             for c in range(3):
                 # target_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
@@ -374,22 +384,19 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
     return one_data, source_rare_class_samples
 
 
-def patch_wise_mix(shift_obj_mask, coords, source_img, target_image):
+def patch_wise_mix(obj_mask, coords, source_img, target_image):
     y_coords, x_coords = coords[:, 0], coords[:, 1]
     y_min, y_max = y_coords.min().item(), y_coords.max().item()
     x_min, x_max = x_coords.min().item(), x_coords.max().item()
     
     # 确保坐标在图像范围内
     y_min = max(y_min, 0)
-    y_max = min(y_max, shift_obj_mask.shape[0] - 1)
+    y_max = min(y_max, obj_mask.shape[0] - 1)
     x_min = max(x_min, 0)
-    x_max = min(x_max, shift_obj_mask.shape[1] - 1)
-    
-    # 提取矩形区域
-    target_region = target_image[:, y_min:y_max+1, x_min:x_max+1]
+    x_max = min(x_max, obj_mask.shape[1] - 1)
     
     # 将处理后的目标区域粘贴到源图像中
-    source_img[:, y_min:y_max+1, x_min:x_max+1] = target_region
+    source_img[:, y_min:y_max+1, x_min:x_max+1] = target_image[:, y_min:y_max+1, x_min:x_max+1]
     return source_img
 
 def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, target_rare_class_samples=[]):
@@ -424,7 +431,7 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
         
         ''' mix the image'''
-        if instance_size > 3000: #5000
+        if instance_size > THRESH_instance_PATCH_WISE:
             ''' instance-wise mix'''
             for c in range(3):
                 source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
