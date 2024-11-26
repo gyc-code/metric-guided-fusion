@@ -39,7 +39,7 @@ visual_iter = 500
 Target_coefficients = None
 Source_coefficients = None
 RARE_CLASS_INSTANCE_WISE = False
-THRESH_instance_PATCH_WISE = 1100000000000 ###1000 # 1000000000  #3000
+THRESH_instance_PATCH_WISE = 1000 ###1000 # 1000000000  #3000
 
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
 RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7

@@ -41,7 +41,7 @@ INPUT:
     SIZE:  (1024, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
 
 DATASETS:
-  TRAIN: ('uda_synthia_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
+  TRAIN: ('uda_synscapes_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
   # ("uda_syn_real_instance_seg_train_eval_cityscapes",)
   #("synscapes_human_cycle_instance_seg_train_eval_cityscapes",)
   #("synscapes_instance_seg_train_eval_cityscapes",) 
