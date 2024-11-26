@@ -13,6 +13,7 @@ from detectron2.data import MetadataCatalog
 from detectron2.utils import comm
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.utils import decode_seg_map_sequence
+from detectron2.utils.visualizer import Visualizer, ColorMode
 from .evaluator import DatasetEvaluator
 
 
@@ -70,6 +71,7 @@ class CityscapesCustomEvaluator(DatasetEvaluator):
         self._cpu_device = torch.device("cpu")
         self._logger = logging.getLogger(__name__)
         self._working_dir = cfg.OUTPUT_DIR
+        self.save_instances = cfg.SAVE_INSTANCE_VISUALIZATION
 
     '''def reset(self):
         self._working_dir = tempfile.TemporaryDirectory(prefix="cityscapes_eval_")
@@ -112,8 +114,18 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         for input, output in zip(inputs, outputs):
             file_name = input["file_name"]
             basename = os.path.splitext(os.path.basename(file_name))[0]
-            pred_txt = os.path.join(self._working_dir, basename + "_pred.txt")
-
+            pred_txt = os.path.join(self._working_dir, "predictions", basename + "_pred.txt")
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_masks")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "instance_masks"))
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
+            if self.save_instances:
+                self.coco_metadata = MetadataCatalog.get("coco_2017_val_panoptic")
+                im = cv2.imread(file_name)
+                v = Visualizer(im[:, :, ::-1], self.coco_metadata, scale=1.2, instance_mode=ColorMode.IMAGE_BW)
+                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device)).get_image()
+                cv2.imwrite(os.path.join(self._working_dir, "predictions", "instance_visualization", basename + ".png"),
+                            instance_result)
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
                 # output = output[output.scores > 0.1]  ##  cindy add , filter will decrease ap
@@ -126,18 +138,17 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
                         score = output.scores[i]
                         mask = output.pred_masks[i].numpy().astype("uint8")
                         png_filename = os.path.join(
-                            self._working_dir, basename, basename + "_{}_{}.png".format(i, classes)
+                            self._working_dir, "predictions", "instance_masks", basename + "_{}_{}.png".format(i, classes)
                         )
                         # vs_png_filename = os.path.join(
                         #     self._temp_dir, basename + "_{}_{}_{}.png".format(i, classes, str(score.item()))
                         # )
-                        if not os.path.exists(os.path.join(self._working_dir, basename)):
-                            os.makedirs(os.path.join(self._working_dir, basename))
                         Image.fromarray(mask * 255).save(png_filename)
                         # Image.fromarray(mask * 255).save(vs_png_filename)
 
                         fout.write(
-                            "{} {} {}\n".format(os.path.basename(png_filename), class_id, score)
+                            "{} {} {}\n".format(os.path.join("instance_masks", os.path.basename(png_filename)),
+                                                class_id, score)
                         )
             else:
                 # Cityscapes requires a prediction file for every ground truth image.
@@ -157,7 +168,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         self._logger.info("Evaluating results under {} ...".format(self._working_dir))
 
         # set some global states in cityscapes evaluation API, before evaluating
-        cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir)
+        cityscapes_eval.args.predictionPath = os.path.abspath(os.path.join(self._working_dir, "predictions"))
         cityscapes_eval.args.predictionWalk = None
         cityscapes_eval.args.JSONOutput = False
         cityscapes_eval.args.colorized = False
