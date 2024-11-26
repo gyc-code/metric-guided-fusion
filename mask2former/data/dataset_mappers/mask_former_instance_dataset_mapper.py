@@ -170,22 +170,17 @@ class MaskFormerInstanceDatasetMapper:
             dict: a format that builtin models in detectron2 accept
         """
         assert self.is_train, "MaskFormerPanopticDatasetMapper should only be used for training!"
-        if "source" in dataset_dict:
+        if "source" in dataset_dict:            
             for data_key in dataset_dict.keys():
-                s = time.time()
                 image = utils.read_image(dataset_dict[data_key]["file_name"], format=self.img_format)
                 utils.check_image_size(dataset_dict[data_key], image)
                 aug_input = T.AugInput(image)
                 aug_input, transforms = T.apply_transform_gens(self.tfm_gens, aug_input)
                 image = aug_input.image
-                print('--------------------------time to read_image and transform :', time.time()-s)
                 s = time.time()
                 new_template_mask = self.__process_template_for_target__(transforms, dataset_dict)
-                print('time to process template_mask:', time.time()-s)
                 if data_key == "source":
-                    s = time.time()
                     annos, masks = self.__transform_annotation__(transforms, dataset_dict, data_key, image)
-                    print('time to transform_annotation:', time.time()-s)
                     masks = [torch.from_numpy(np.ascontiguousarray(x)) for x in masks]
 
                 image = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
@@ -209,9 +204,7 @@ class MaskFormerInstanceDatasetMapper:
                 if data_key == "target":
                     dataset_dict["target"]['template_img'] = new_template_mask
                 else:
-                    s = time.time()
                     instances = self.__mask_to_instance__(image, annos, masks)
-                    print('time to mask_to_instance:', time.time()-s)
                     dataset_dict[data_key]["instances"] = instances
                 dataset_dict[data_key]["image"] = image
         else:

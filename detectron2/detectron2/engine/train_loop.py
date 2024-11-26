@@ -504,32 +504,6 @@ class AMPTrainer(SimpleTrainer):
 
     def _init_ema_weights(self):
         self.ema_model = copy.deepcopy(self.model).eval() # init , no weight load
-
-    def __print_label__(self, instances, image, save_path):
-        image_copy = copy.deepcopy(image.permute(1,2,0).numpy().astype(np.uint8))
-        cv2.imwrite(save_path, image_copy)
-        image_read = cv2.imread(save_path)
-
-        pred_masks = instances.pred_masks
-        scores = instances.scores
-        pred_classes = instances.pred_classes
-        for i, pred_mask in enumerate(pred_masks):
-            score = scores[i].item()
-            class_id = pred_classes[i].item()
-            text = f"s{score:.2f}|c{class_id}"
-            # 获取 pred_mask 的右上角位置
-            mask_np = pred_mask.cpu().numpy()
-            non_zero_indices = torch.nonzero(pred_mask)
-            if len(non_zero_indices) == 0:
-                continue
-            y_min, x_min = non_zero_indices.min(dim=0)[0]
-            y_max, x_max = non_zero_indices.max(dim=0)[0]
-            y_center = int((y_min + y_max) // 2)
-            x_center = int((x_min + x_max) // 2)
-            image_text = cv2.putText(image_read, text, (x_center, y_center), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
-        cv2.imwrite(save_path, image_text)
-
-
     def _update_ema(self, iter):
         alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)  
         #   try update this way to speedup
@@ -544,13 +518,9 @@ class AMPTrainer(SimpleTrainer):
         assert self.model.training, "[AMPTrainer] model was changed to eval mode!"
         assert torch.cuda.is_available(), "[AMPTrainer] CUDA is required for AMP training!"
         from torch.cuda.amp import autocast
-        start = time.perf_counter()
         data = next(self._data_loader_iter)
-        data_time = time.perf_counter() - start
-        print('time for loading :', data_time)
         self.local_iter += 1
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
-            
             batch_size = len(data)
             assert batch_size == 3, f"Batch size must be 3, but got {batch_size}"
             # Init/update ema model
@@ -567,7 +537,6 @@ class AMPTrainer(SimpleTrainer):
                 # Generate pseudo-label
                 pseudo_labels = self.ema_model(data, target=True) 
                 pseudo_instances_num_list = []
-                start = time.perf_counter()
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
                     pseudo_instances = pseudo_labels[i]['instances'] 
@@ -581,17 +550,14 @@ class AMPTrainer(SimpleTrainer):
                         pseudo_instances_num_list.append(len(pseudo_labels[i]['instances']._fields))
                     data[i]['target']['instances'] = pseudo_labels[i]['instances']
                 del pseudo_labels
-                print('time for pseudo label:', time.perf_counter() - start)
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
-                start = time.perf_counter()
                 if pseudo_instances_num_list[1] > 0:
                     data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], self.local_iter, self.folder_name, self.source_rare_class_samples)
                     # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
                 if pseudo_instances_num_list[2] > 0:
                     data[2] = target_instance_paste_to_source_mix(data[2], self.local_iter, self.folder_name)
-                print('time for mix:', time.perf_counter() - start)
 
                 ''' use mini batch loss ,one batch data=data0: source+ data1: s2t+ data2: t2s '''
                 self.optimizer.zero_grad()
