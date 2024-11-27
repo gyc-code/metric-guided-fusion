@@ -28,7 +28,7 @@ remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 
 VISUL = False
-ITERATION_TO_START_UDA = 1
+ITERATION_TO_START_UDA = 25000
 MINI_BATCH_LOSS = True
 USE_CLIP = False
 
@@ -518,7 +518,9 @@ class AMPTrainer(SimpleTrainer):
         assert self.model.training, "[AMPTrainer] model was changed to eval mode!"
         assert torch.cuda.is_available(), "[AMPTrainer] CUDA is required for AMP training!"
         from torch.cuda.amp import autocast
+        start = time.perf_counter()
         data = next(self._data_loader_iter)
+        data_time = time.perf_counter() - start
         self.local_iter += 1
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             batch_size = len(data)
