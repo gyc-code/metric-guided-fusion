@@ -179,8 +179,8 @@ class CityscapesInstanceEvaluator(CityscapesEvaluator):
             )["averages"]
 
             ret = OrderedDict()
-            # ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100, "AP50m": results["allAp50m"] * 100, 
+            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+            # ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100, "AP50m": results["allAp50m"] * 100, 
                            "AP100m": results["allAp100m"] * 100, "AP50%50m": results["allAp50%50m"] * 100}
             self._logger.info(ret)
             self._working_dir.cleanup() 
