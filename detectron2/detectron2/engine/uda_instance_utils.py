@@ -35,11 +35,11 @@ __all__ = [
 
 DEBUG_IMG_FLAG = False
 VISUALIZE_POLYGON = False
-visual_iter = 10000
+visual_iter = 1
 Target_coefficients = None
 Source_coefficients = None
-RARE_CLASS_INSTANCE_WISE = False
-THRESH_instance_PATCH_WISE = 10000000000 ###1000 # 1000000000  #3000
+THRESH_instance_PATCH_WISE = 1500
+MINI_AREA =300
 
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
 RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
@@ -140,14 +140,14 @@ def rare_class_balance(rare_class_samples, img_to_paste, instance_to_add):
         img = sample['img']
         instance = sample['instance']
         mask = instance.gt_masks[0]
-        if RARE_CLASS_INSTANCE_WISE:
+        if mask.sum().item() > THRESH_instance_PATCH_WISE:
             for c in range(3):
                 img_to_paste[c,:][mask] = img[c,:][mask]
         else:
             # blend patch-wise mix
             coords = torch.nonzero(mask)
-            if coords.numel() == 0:
-                continue
+            # if coords.numel() == 0:
+            #     continue
             img_to_paste = patch_wise_mix(mask, coords, img_to_paste, img)
             
         remove_occlussion(instance_to_add, instance)
@@ -172,80 +172,6 @@ def visulize_color_instances(instances):
 
     return color_instances
 
-def polyfit(pseudo_instances):
-    center_row_list = []
-    height_list = []
-    for i, pred_mask in enumerate(pseudo_instances.pred_masks):
-        foreground_indices = pred_mask.nonzero(as_tuple=False)
-        if foreground_indices.size(0) == 0:
-            continue
-            # raise ValueError("The pred_mask contains no foreground pixels.")
-        # 计算中心坐标
-        center_row = foreground_indices.float().mean(dim=0)[0].item()
-        # print('center : ', foreground_indices.float().mean(dim=0))
-        # 计算前景高度
-        min_row = foreground_indices[:, 0].min().item()
-        max_row = foreground_indices[:, 0].max().item()
-        height = max_row - min_row + 1
-        center_row_list.append(center_row)
-        height_list.append(height)
-
-    if len(center_row_list) > 2:
-        # 示例数据：目标高度数组和最低点数组
-        height_list = np.array(height_list)
-        center_row_list = np.array(center_row_list)
-        # 使用NumPy的polyfit函数拟合二次多项式
-        Target_coefficients = np.polyfit(height_list, center_row_list, 1)
-        ########  to show ###########################
-        # # 创建一个多项式对象
-        # polynomial = np.poly1d(Target_coefficients)
-        # # 生成预测值
-        # heights_fit = np.linspace(min(height_list), max(height_list), 100)
-        # center_row_list = polynomial(heights_fit)
-        # # 打印拟合的多项式系数
-        # print(f"Fitted polynomial coefficients: {Target_coefficients}")
-        # # 可视化
-        # plt.figure(figsize=(10, 6))
-        # plt.scatter(heights_fit, center_row_list, color='red', label='Data points')
-        # plt.plot(heights_fit, center_row_list, color='blue', label='Fitted quadratic polynomial')
-        # plt.xlabel('Height')
-        # plt.ylabel('Lowest Point')
-        # plt.title('Quadratic Polynomial Fitting')
-        # plt.legend()
-        # plt.grid(True)
-        # # 保存图片
-        # plt.savefig('quadratic_polynomial_fitting.png')
-        ########  to show ###########################
-    else:
-        print('use last target_coefficients')
-        # 计算前景高度
-    min_row = foreground_indices[:, 0].min().item()
-    max_row = foreground_indices[:, 0].max().item()
-    height = max_row - min_row + 1
-
-    # if Target_coefficients is not None:
-    #     foreground_indices = obj_mask.nonzero(as_tuple=False)
-    #     # 计算中心坐标
-    #     center_row = int(foreground_indices.float().mean(dim=0)[0].item())
-    #     # 创建一个多项式对象
-    #     polynomial = np.poly1d(Target_coefficients)
-    #     # 生成预测值
-    #     # heights_fit = np.linspace(min(height_list), max(height_list), 100)
-    #     center_row_fit = int(polynomial(height))
-    #     # x_shift = random.randint(-150, 150)
-    #     x_shift = 0
-    #     y_shift = center_row_fit - center_row
-    #     # print(center_row_fit, center_row, y_shift)
-    # else:
-    #     ''' shift obj_mask'''
-    #     x_shift = random.randint(-150, 150)
-    #     if height < 100: # TODO : CHANEG TO height
-    #         y_shift = random.randint(-100, -50)
-    #     else:
-    #         y_shift = random.randint(0, 100)
-    #     # x_shift = 0
-    #     # y_shift = 0
-
 def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
     ''' depth of object gotten from obj_depth_map is the source depth, 
     and find this depth in depth_map_to_paste to know where to paste.
@@ -266,73 +192,82 @@ def get_object_shift_by_depth_map(obj_mask, obj_depth_map, depth_map_to_paste):
     # cv2.imwrite('obj_target_depth_' + str(obj_depth) + '.png',((region_in_paste_img*1)*255))
     return int(depth_center_x_to_paste - obj_center_x), int(depth_center_y_to_paste - obj_center_y)
 
-def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
-    global Target_coefficients
-    # depth_map_source = one_data['source']['depth'].astype(int)
-    # depth_map_target = one_data['target']['depth'].astype(int)
-    gt_instance = one_data['source']['instances']
-    gt_classes = gt_instance.gt_classes
-    # gt_polygons = gt_syn.gt_masks
-    gt_masks = gt_instance.gt_masks
-    source_img = one_data['source']['image']
-    _, hs, ws = source_img.shape
 
+def visulaise_mix_result(direction, one_data, local_iter, folder_name, file_id, target_img, source_img, gt_instance, pseudo_instances):
+    color_instances = visulize_color_instances(one_data['source']['instances'])
+    target_img_vis = target_img.cpu().permute(1,2,0).numpy()
+    source_img_vis = source_img.cpu().permute(1,2,0).numpy()
+    target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
+    source_img_vis = cv2.cvtColor(source_img_vis,cv2.COLOR_BGR2RGB)
+    if direction == 's2t':
+        gt_color_instances = visulize_color_instances(gt_instance)
+    else:
+        color_pseudo_instances = visulize_color_instances(pseudo_instances)
+    if VISUALIZE_POLYGON:   
+        color_map = get_cityscapes_labels()
+        for i in range(one_data['source']['instances'].__len__()):
+            mask = one_data['source']['instances'].gt_masks[i].to(torch.uint8).numpy()
+            class_id = one_data['source']['instances'].gt_classes[i].item()
+            contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                if direction == 's2t':
+                    cv2.drawContours(target_img_vis, [contour], -1, (color_map[class_id][2],color_map[class_id][1], color_map[class_id][0]), 2)  # 绿色轮廓
+                else:
+                    cv2.drawContours(source_img_vis, [contour], -1, (color_map[class_id][2],color_map[class_id][1], color_map[class_id][0]), 2)
+    if direction == 's2t':
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_source_instance.jpg', gt_color_instances)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_target_img.jpg', target_img_vis)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_source_img.jpg', source_img_vis)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_mixed_instance.jpg', color_instances)
+            
+    else:
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_target_instance.jpg', color_pseudo_instances)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_target_img.jpg', target_img_vis)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_source_img.jpg', source_img_vis)
+        cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_mixed_instance.jpg', color_instances)
+      
+
+
+def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
+    gt_instance = one_data['source']['instances']
+    source_img = one_data['source']['image']
     target_img = one_data['target']['image']
     pseudo_instances = one_data['target']['instances']
     file_id = one_data['target']['image_id'].split('.')[0]
+    
+    gt_classes = gt_instance.gt_classes
+    gt_masks = gt_instance.gt_masks
 
-    if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-        target_img_vis = target_img.cpu().permute(1,2,0).numpy()
-        target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
-        cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_target_ori.jpg', target_img_vis)
-        instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
-        gt_color_instances = visulize_color_instances(gt_instance)
+    _, hs, ws = source_img.shape
 
-    # gt_instance_select = Instances((hs, ws))
     THIS_FRAME_HAS_RARE_CLASSES = False
+    
     keep = torch.ones(len(gt_instance), dtype=torch.bool)
     for i, obj_mask in enumerate(gt_masks):
         instance_size = (obj_mask*1).sum().item()
-        if instance_size < 10:
+        if instance_size < MINI_AREA:
             keep[i] = False
             continue 
-        # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_source, depth_map_target)
-        ''' shift obj_mask'''
-        # x_shift = random.randint(-250, 250)
-        # if instance_size < 5000: 
-        #     y_shift = random.randint(-100, -50)
-        # else:
-        #     y_shift = random.randint(0, 100)
         x_shift, y_shift = 0, 0
-
         shift_obj_mask, shift_source_image = translated_obj_mask(obj_mask,source_img, dx=x_shift,dy=y_shift)        
         if i == 0:
             source_img = torch.from_numpy(cv2.GaussianBlur(source_img.permute(1,2,0).to(torch.uint8).numpy(), (5, 5),0)).permute(2,0,1)
-            
-        if instance_size > THRESH_instance_PATCH_WISE: #5000
+        
+        if instance_size > THRESH_instance_PATCH_WISE:
             ''' instance-wise mix'''
             for c in range(3):
                 # target_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
                 target_img[c,:][shift_obj_mask] = shift_source_image[c,:][shift_obj_mask]
-                if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-                    # instances_img[c,:][shift_obj_mask] = source_img[c,:][obj_mask]
-                    instances_img[c,:][shift_obj_mask] = shift_source_image[c,:][shift_obj_mask]
         else:
             ''' blend patch-wise mix'''
-            # 新增逻辑：使用掩码的最小外接矩形进行粘贴，并应用平滑过渡
             coords = torch.nonzero(shift_obj_mask)
-            if coords.numel() == 0:
-                # 如果掩码为空，跳过此实例
-                keep[i] = False
-                continue
             target_img = patch_wise_mix(shift_obj_mask, coords, target_img, shift_source_image)
-            
-
         # for rare class balance
-        ins = Instances((hs, ws))
-        ins.gt_classes = gt_classes[i].view(1)
-        ins.gt_masks = shift_obj_mask.view(1, hs, ws)
+
         if gt_classes[i].item() in RARE_CLASS_NAMES:
+            ins = Instances((hs, ws))
+            ins.gt_classes = gt_classes[i].view(1)
+            ins.gt_masks = shift_obj_mask.view(1, hs, ws)
             source_rare_class_samples.append({'img':source_img, 'instance':ins})
             THIS_FRAME_HAS_RARE_CLASSES = True
             
@@ -341,7 +276,6 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
     if len(gt_instance_select._fields) != 0: # if gt_instance_selecthas nothing, no labels mix
         # do class balance
         if not THIS_FRAME_HAS_RARE_CLASSES and len(source_rare_class_samples):
-            # print('rare class sample : ', len(source_rare_class_samples))
             gt_instance_select, source_rare_class_samples = rare_class_balance(source_rare_class_samples, target_img, gt_instance_select)
     
         pseudo_instances.gt_masks = pseudo_instances.pred_masks.bool().cpu()
@@ -350,37 +284,13 @@ def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, sourc
         del pseudo_instances._fields['pred_classes']
         del pseudo_instances._fields['pred_boxes']
         del pseudo_instances._fields['scores']
-        remove_occlussion(pseudo_instances, gt_instance_select[1:]) # modify pseudo_instances, remove parts of coverd by gt_instance_select
-        one_data['source']['instances'] = Instances.cat([pseudo_instances, gt_instance_select[1:]])
+        remove_occlussion(pseudo_instances, gt_instance_select) # modify pseudo_instances, remove parts of coverd by gt_instance_select
+        one_data['source']['instances'] = Instances.cat([pseudo_instances, gt_instance_select])
         one_data['source']['image'] = target_img
         
         if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-            color_instances = visulize_color_instances(one_data['source']['instances'])
-            target_img_vis = target_img.cpu().permute(1,2,0).numpy()
-            source_img_vis = source_img.cpu().permute(1,2,0).numpy()
-            target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
-            source_img_vis = cv2.cvtColor(source_img_vis,cv2.COLOR_BGR2RGB)
-            target_img_vis_cp = copy.deepcopy(target_img_vis)
-            if VISUALIZE_POLYGON:   
-                color_map = get_cityscapes_labels()
-                for i in range(one_data['source']['instances'].__len__()):
-                    mask = one_data['source']['instances'].gt_masks[i].to(torch.uint8).numpy()
-                    class_id = one_data['source']['instances'].gt_classes[i].item()
-                    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                    for contour in contours:
-                        cv2.drawContours(target_img_vis_cp, [contour], -1, (color_map[class_id][2],color_map[class_id][1], color_map[class_id][0]), 2)  # 绿色轮廓
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_s2t_mix.jpg', target_img_vis_cp)
-            instances_img = instances_img.transpose((1,2,0))
-            instances_img = cv2.cvtColor(instances_img,cv2.COLOR_BGR2RGB)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_instance.jpg', instances_img)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_s2t_color_instance.jpg', color_instances)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_source_gt_color_instance.jpg', gt_color_instances)
-
-            city = one_data['source']['file_name'].split('/')[8]
-            s_img_name = one_data['source']['file_name'].split('/')[-1]
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_gt_img_'  + city + '_' + s_img_name, source_img_vis)
-            del target_img_vis_cp
-            
+            direction='s2t'
+            visulaise_mix_result(direction, one_data, local_iter, folder_name, file_id, target_img, source_img, gt_instance, pseudo_instances)
     return one_data, source_rare_class_samples
 
 
@@ -404,30 +314,19 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
     source_img = one_data['source']['image']
     target_img = one_data['target']['image']
     pseudo_instances = one_data['target']['instances']
-    pred_masks = pseudo_instances.pred_masks
     file_id = one_data['target']['image_id'].split('.')[0]
-
-    if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-        t_instances_img = 255 * np.ones(target_img.shape, dtype=np.uint8)
-
+    
+    pred_masks = pseudo_instances.pred_masks
+    
     keep = torch.ones(len(pseudo_instances), dtype=torch.bool)
     for i, obj_mask in enumerate(pred_masks.cpu()):
-    # for i in range(gt_masks.shape[0]):
         instance_size = (obj_mask).sum().item()
-        if instance_size < 50:
+        if instance_size < MINI_AREA:
             keep[i] = False
             continue 
         obj_mask = obj_mask.bool()
-        
-        # x_shift, y_shift = get_object_shift_by_depth_map(obj_mask, depth_map_target, depth_map_source) # TODO SHIFT FOR THIS
         x_shift, y_shift = 0, 0
         ''' shift obj_mask'''
-        # x_shift = random.randint(-250, 250)
-        # if instance_size < 5000: 
-        #     y_shift = random.randint(-100, -50)
-        # else:
-        #     y_shift = random.randint(0, 100)
-        
         shift_obj_mask, shift_target_image = translated_obj_mask(obj_mask,target_img, dx=x_shift,dy=y_shift)    
         
         ''' mix the image'''
@@ -435,50 +334,24 @@ def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, targe
             ''' instance-wise mix'''
             for c in range(3):
                 source_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
-                if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-                    t_instances_img[c,:][shift_obj_mask] = shift_target_image[c,:][shift_obj_mask]
         else:
             ''' blend patch-wise mix'''
-            # 新增逻辑：使用掩码的最小外接矩形进行粘贴，并应用平滑过渡
             coords = torch.nonzero(shift_obj_mask)
-            if coords.numel() == 0:
-                # 如果掩码为空，跳过此实例
-                keep[i] = False
-                continue
             source_img = patch_wise_mix(shift_obj_mask, coords, source_img, shift_target_image)
         
     pseudo_instances_select = pseudo_instances[keep]
-    pseudo_instances_select.gt_classes = pseudo_instances_select.pred_classes.cpu()
-    pseudo_instances_select.gt_masks = pseudo_instances_select.pred_masks.bool().cpu()
-    
+
     if len(pseudo_instances_select._fields) != 0: # if gt_instance_selecthas nothing, no labels mix
+        pseudo_instances_select.gt_classes = pseudo_instances_select.pred_classes.cpu()
+        pseudo_instances_select.gt_masks = pseudo_instances_select.pred_masks.bool().cpu()  
+        
         remove_occlussion(gt_instance, pseudo_instances_select) # modify pseudo_instances, remove parts of coverd by gt_instance_select
         one_data['source']['instances'] = Instances.cat([gt_instance, pseudo_instances_select])
         one_data['source']['image'] = source_img
+        
         if DEBUG_IMG_FLAG or local_iter % visual_iter ==0:
-            color_instances = visulize_color_instances(one_data['source']['instances'])
-            color_pseudo_instances = visulize_color_instances(pseudo_instances)
-            
-            target_img_vis = target_img.cpu().permute(1,2,0).numpy()
-            source_img_vis = source_img.cpu().permute(1,2,0).numpy()
-            target_img_vis = cv2.cvtColor(target_img_vis,cv2.COLOR_BGR2RGB)
-            source_img_vis = cv2.cvtColor(source_img_vis,cv2.COLOR_BGR2RGB)
-            source_img_vis_cp = copy.deepcopy(source_img_vis)
-            if VISUALIZE_POLYGON:   
-                color_map = get_cityscapes_labels()
-                for i in range(one_data['source']['instances'].__len__()):
-                    mask = one_data['source']['instances'].gt_masks[i].to(torch.uint8).numpy()
-                    class_id = one_data['source']['instances'].gt_classes[i].item()
-                    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                    for contour in contours:
-                        cv2.drawContours(source_img_vis_cp, [contour], -1, (color_map[class_id][2],color_map[class_id][1], color_map[class_id][0]), 2)  # 轮廓颜色根据CityScapes 的颜色
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter) + '_t2s_mix.jpg', source_img_vis_cp)
-            t_instances_img = t_instances_img.transpose((1,2,0))
-            t_instances_img = cv2.cvtColor(t_instances_img,cv2.COLOR_BGR2RGB)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_instance.jpg' , t_instances_img)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_color_instance.jpg', color_instances)
-            cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_pseudo_color_instance.jpg', color_pseudo_instances)
-            del source_img_vis_cp
+            direction='t2s'
+            visulaise_mix_result(direction, one_data, local_iter, folder_name, file_id, target_img, source_img, gt_instance, pseudo_instances)
         del pseudo_instances
     return one_data
 

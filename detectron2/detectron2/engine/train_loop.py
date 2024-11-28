@@ -28,7 +28,7 @@ remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 
 VISUL = False
-ITERATION_TO_START_UDA = 25000
+ITERATION_TO_START_UDA = 0
 MINI_BATCH_LOSS = True
 USE_CLIP = False
 
