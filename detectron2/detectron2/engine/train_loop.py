@@ -27,6 +27,8 @@ remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
 
+MINI_AREA_cityscapes =300
+MINI_AREA_KITTI360 = 300
 VISUL = False
 ITERATION_TO_START_UDA = 0
 MINI_BATCH_LOSS = True
@@ -522,6 +524,8 @@ class AMPTrainer(SimpleTrainer):
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
         self.local_iter += 1
+
+        
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             batch_size = len(data)
             assert batch_size == 3, f"Batch size must be 3, but got {batch_size}"
@@ -529,6 +533,13 @@ class AMPTrainer(SimpleTrainer):
             if self.local_iter == ITERATION_TO_START_UDA + 1:
                 self._init_ema_weights()
             self._update_ema(self.local_iter)
+            
+            if "cityscapes" in data[0]['target']['file_name']:
+                mini_area= MINI_AREA_cityscapes
+            elif "KITTI360" in data[0]['target']['file_name']:
+                mini_area= MINI_AREA_KITTI360
+            else:
+                mini_area= 300
             
             ''' cindy : generate pseudo label for target and do mix '''
             with torch.no_grad():
@@ -556,10 +567,10 @@ class AMPTrainer(SimpleTrainer):
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
                 if pseudo_instances_num_list[1] > 0:
-                    data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], self.local_iter, self.folder_name, self.source_rare_class_samples)
+                    data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], mini_area, self.local_iter, self.folder_name, self.source_rare_class_samples)
                     # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
                 if pseudo_instances_num_list[2] > 0:
-                    data[2] = target_instance_paste_to_source_mix(data[2], self.local_iter, self.folder_name)
+                    data[2] = target_instance_paste_to_source_mix(data[2], mini_area, self.local_iter, self.folder_name)
 
                 ''' use mini batch loss ,one batch data=data0: source+ data1: s2t+ data2: t2s '''
                 self.optimizer.zero_grad()

@@ -13,7 +13,7 @@ MODEL:
     PRETRAIN_IMG_SIZE: 384
   WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
   # WEIGHTS: "./pretrain/glip_large_model.pth"
-  # WEIGHTS: "./output/a_category_4UDA_swinL/cs_synthia_human_cycle/model_final.pth"
+  # WEIGHTS: "./output/a_category_4UDA_swinL/cs_urbansyn_human_cycle/model_final.pth"
   #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   ##  #"swin_large_patch4_window12_384_22k.pkl"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
@@ -26,7 +26,7 @@ SOLVER:
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
   BASE_LR: 0.0001
-  MAX_ITER: 40000
+  MAX_ITER: 25000
 
 
 INPUT:
@@ -41,17 +41,7 @@ INPUT:
     SIZE:  (512, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
 
 DATASETS:
-  TRAIN: ('uda_synscapes_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
-  # ("uda_syn_real_instance_seg_train_eval_cityscapes",)
-  #("synscapes_human_cycle_instance_seg_train_eval_cityscapes",)
-  #("synscapes_instance_seg_train_eval_cityscapes",) 
-  #("urbansyn_vehicle_instance_seg_train_eval_cityscapes",)
-  # ("uda_syn_real_vehicle_instance_seg_train_eval_cityscapes",)
-  # ("uda_syn_real_human_cycle_instance_seg_train_eval_cityscapes",)
-  # #("uda_syn_real_instance_seg_train_eval_cityscapes",) 
-  #("urbansyn_vehicle_instance_seg_train_eval_cityscapes",) 
-  #("urbansyn_instance_seg_train_eval_cityscapes",) 
-  # ("uda_syn_real_human_cycle_instance_seg_train_eval_cityscapes",)
+  TRAIN: ('uda_urbansyn_syn_real_human_cycle_instance_seg_train_eval_cityscapes',) 
   TEST: ("cityscapes_fine_instance_seg_val",)
 TEST:
   EVAL_PERIOD: 5000

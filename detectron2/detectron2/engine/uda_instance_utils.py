@@ -35,11 +35,11 @@ __all__ = [
 
 DEBUG_IMG_FLAG = False
 VISUALIZE_POLYGON = False
-visual_iter = 1
+visual_iter = 500
 Target_coefficients = None
 Source_coefficients = None
 THRESH_instance_PATCH_WISE = 1500
-MINI_AREA =300
+
 
 # RARE_CLASS_NAMES = [3, 4, 5, 6, 7] # bus is 4, train is 5,  motor is 6, bike is 7
 RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike is 7
@@ -226,26 +226,28 @@ def visulaise_mix_result(direction, one_data, local_iter, folder_name, file_id, 
         cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_source_img.jpg', source_img_vis)
         cv2.imwrite(folder_name + file_id + '_' + str(local_iter)+ '_t2s_mixed_instance.jpg', color_instances)
       
-
-
-def source_instance_paste_to_target_mix(one_data, local_iter, folder_name, source_rare_class_samples):
+def mix_prepare(one_data, local_iter, folder_name):
     gt_instance = one_data['source']['instances']
     source_img = one_data['source']['image']
     target_img = one_data['target']['image']
     pseudo_instances = one_data['target']['instances']
     file_id = one_data['target']['image_id'].split('.')[0]
+    return gt_instance, source_img, target_img, pseudo_instances, file_id
     
+def source_instance_paste_to_target_mix(one_data, mini_area, local_iter, folder_name, source_rare_class_samples):
+    gt_instance, source_img, target_img, pseudo_instances, file_id = mix_prepare(one_data, local_iter, folder_name)
+    
+    THIS_FRAME_HAS_RARE_CLASSES = False
+
     gt_classes = gt_instance.gt_classes
     gt_masks = gt_instance.gt_masks
 
     _, hs, ws = source_img.shape
 
-    THIS_FRAME_HAS_RARE_CLASSES = False
-    
     keep = torch.ones(len(gt_instance), dtype=torch.bool)
     for i, obj_mask in enumerate(gt_masks):
         instance_size = (obj_mask*1).sum().item()
-        if instance_size < MINI_AREA:
+        if instance_size < mini_area:
             keep[i] = False
             continue 
         x_shift, y_shift = 0, 0
@@ -309,19 +311,15 @@ def patch_wise_mix(obj_mask, coords, source_img, target_image):
     source_img[:, y_min:y_max+1, x_min:x_max+1] = target_image[:, y_min:y_max+1, x_min:x_max+1]
     return source_img
 
-def target_instance_paste_to_source_mix(one_data, local_iter, folder_name, target_rare_class_samples=[]):
-    gt_instance = one_data['source']['instances']
-    source_img = one_data['source']['image']
-    target_img = one_data['target']['image']
-    pseudo_instances = one_data['target']['instances']
-    file_id = one_data['target']['image_id'].split('.')[0]
+def target_instance_paste_to_source_mix(one_data, mini_area, local_iter, folder_name, target_rare_class_samples=[]):
+    gt_instance, source_img, target_img, pseudo_instances, file_id = mix_prepare(one_data, local_iter, folder_name)
     
     pred_masks = pseudo_instances.pred_masks
     
     keep = torch.ones(len(pseudo_instances), dtype=torch.bool)
     for i, obj_mask in enumerate(pred_masks.cpu()):
         instance_size = (obj_mask).sum().item()
-        if instance_size < MINI_AREA:
+        if instance_size < mini_area:
             keep[i] = False
             continue 
         obj_mask = obj_mask.bool()
@@ -365,8 +363,6 @@ def  dynamic_threshold_by_size(size_obj, image_size):
     b = 1
     a = 0.2 / np.log(b + 1)
     return a * np.log(b * normalized_area + 1) + d
-
-
 
 def refine_class_combine_clip_m2f(clip_result, m2f_result, update_flag=False): # instance_mask_size, image_shape,
     ''' combine CLIP with mask2former result, 

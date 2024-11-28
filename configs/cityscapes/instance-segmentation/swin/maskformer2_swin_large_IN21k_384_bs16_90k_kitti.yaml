@@ -11,8 +11,8 @@ MODEL:
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
-  # WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
-  WEIGHTS: "./output/a_category_4UDA_swinL/kitti_urbansyn_human_cycle/model_final.pth"
+  WEIGHTS: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
+  # WEIGHTS: "./output/a_category_4UDA_swinL/kitti_urbansyn_human_cycle/model_final.pth"
   #"pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   ##  #"swin_large_patch4_window12_384_22k.pkl"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
@@ -46,7 +46,7 @@ INPUT:
 
 
 DATASETS:
-  TRAIN: ('urbansyn_instance_seg_train_eval_kitti360',) 
+  TRAIN: ('uda_urbansyn_syn_real_human_cycle_instance_seg_train_eval_kitti360',) 
   TEST: ("kitti360_instance_seg_val",)
 
 TEST:
