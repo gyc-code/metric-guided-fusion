@@ -46,6 +46,75 @@ RARE_CLASS_NAMES = [5, 6] # 3 for truck ,bus is 4, train is 5,  motor is 6, bike
 # RARE_CLASS_NAMES = [] # close rare balance for ablation  TODO : TODO SHIFT FOR THIS
 # RARE_CLASS_NAMES = [5, 6] # for kitti360, bus is 4,  train is 6
 
+import kornia.color as K
+
+def color_transfer_rgb_to_lab(source_img: torch.Tensor, target_img: torch.Tensor) -> torch.Tensor:
+    """
+    使用LAB空间的均值-方差匹配来将source_img的颜色特性匹配到target_img上。
+    输入的图像与输出的图像均为[C,H,W]的uint8张量 (0-255)。
+    """
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # 将图像转为float并归一化到[0,1]
+    source_img = source_img.to(device).float() / 255.0
+    target_img = target_img.to(device).float() / 255.0
+
+    # 增加batch维度: [1, C, H, W]
+    source_img = source_img.unsqueeze(0)  # [1,3,H,W]
+    target_img = target_img.unsqueeze(0)  # [1,3,H,W]
+
+    # 将RGB转为LAB (L:0-100, a:-128~127, b:-128~127)
+    s_lab = K.rgb_to_lab(source_img)  # [1,3,H,W]
+    t_lab = K.rgb_to_lab(target_img)  # [1,3,H,W]
+
+    # 计算统计特征
+    s_mean = s_lab.mean(dim=[2,3], keepdim=True)  # [1,3,1,1]
+    s_std = s_lab.std(dim=[2,3], keepdim=True)    # [1,3,1,1]
+
+    t_mean = t_lab.mean(dim=[2,3], keepdim=True)  # [1,3,1,1]
+    t_std = t_lab.std(dim=[2,3], keepdim=True)    # [1,3,1,1]
+
+    # 执行颜色迁移: (s_lab - s_mean) / s_std * t_std + t_mean
+    # 不要对LAB值进行0到1的clamp，这会破坏LAB空间的正常分布。
+    new_s_lab = (s_lab - s_mean) / (s_std + 1e-8) * (t_std + 1e-8) + t_mean
+
+    # 将LAB转回RGB，此时得到的RGB值范围在[0,1]之外的可能性不大，
+    # 如果有，可以再对转换后的RGB进行clamp。
+    new_s_rgb = K.lab_to_rgb(new_s_lab)
+
+    # 确保RGB在[0,1]之间，然后转换回0-255的uint8
+    new_s_rgb = new_s_rgb.clamp(0, 1)
+    new_s_rgb = (new_s_rgb * 255.0).byte()
+
+    # 移除batch维度并转回CPU
+    new_s_rgb = new_s_rgb.squeeze(0).cpu()
+
+    return new_s_rgb
+
+
+
+def data_lab_transform(data: list) -> list:
+    """
+    对data列表中每个元素的source['image']进行颜色迁移将其映射到对应的target['image']颜色分布上。
+    data的结构假设如下
+    data[i] = {
+      'source': {
+         'image': Tensor[C,H,W], dtype=uint8
+      },
+      'target': {
+         'image': Tensor[C,H,W], dtype=uint8
+      }
+    }
+    函数会在原data上进行修改并返回修改后的data。
+    """
+    for i, item in enumerate(data):
+        source_img = item['source']['image']
+        target_img = item['target']['image']
+        new_source_img = color_transfer_rgb_to_lab(source_img, target_img)
+        data[i]['source']['image'] = new_source_img
+    
+    return data
+
+    
 def translated_obj_mask(obj_mask,image, dx=50,dy=50):
     ''' dx control col, dy control row,dy > 0, move down, dx > 0, move right'''
     if dx==0 and dy==0:

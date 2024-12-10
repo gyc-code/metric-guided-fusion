@@ -22,7 +22,7 @@ import cv2
 from detectron2.structures import Instances, Boxes
 import torch.nn.functional as F
 
-from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix,\
+from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix, data_lab_transform, \
 remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
@@ -500,7 +500,7 @@ class AMPTrainer(SimpleTrainer):
         self.alpha = 0.999
         timestamp = time.time()
         human_readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d-%H:%M:%S')
-        self.folder_name = './output/debug_in_img_' + human_readable_time+ '/'
+        self.folder_name = './output/0000debug_in_img_' + human_readable_time+ '/'
         dir = pathlib.Path(self.folder_name)
         dir.mkdir(parents=True, exist_ok=True)
 
@@ -540,6 +540,8 @@ class AMPTrainer(SimpleTrainer):
                 mini_area= MINI_AREA_KITTI360
             else:
                 mini_area= 300
+            ''' do LAB transformation for source image from source to target '''
+            data = data_lab_transform(data)
             
             ''' cindy : generate pseudo label for target and do mix '''
             with torch.no_grad():
