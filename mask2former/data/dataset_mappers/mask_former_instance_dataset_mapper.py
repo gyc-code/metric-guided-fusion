@@ -152,7 +152,8 @@ class MaskFormerInstanceDatasetMapper:
             return None
         else:
             new_template_mask = copy.deepcopy(self.template_mask)
-            for index, t in enumerate(transforms):
+            template_transforms= copy.deepcopy(transforms)
+            for index, t in enumerate(template_transforms):
                 # print(t.__class__.__name__)
                 if 'Color' in t.__class__.__name__:
                     continue
