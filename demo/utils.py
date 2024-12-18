@@ -103,12 +103,12 @@ def get_error_map(gt_color, visual_pred_color):
         mask_white = (~gt_has_data) & (~pred_has_data)
 
         # 分配颜色（OpenCV使用BGR格式）
-        difference_image[mask_orange] = [0, 165, 255]   # 橙色
+        # difference_image[mask_orange] = [0, 165, 255]   # 橙色
         difference_image[mask_gray] = [128, 128, 128]   # 灰色
         difference_image[mask_blue] = [255, 0, 0]       # 蓝色
         difference_image[mask_green] = [0, 255, 0]      # 绿色
         difference_image[mask_white] = [255, 255, 255]  # 白色
-
+        
         # 在error_map上添加图例
         error_map = difference_image.copy()
         error_map = add_legend(error_map)
@@ -151,7 +151,7 @@ def add_legend(image):
     return image            
 
 
-def get_error_map_bp(gt_color, visual_pred_color):
+def get_error_map_red_green(gt_color, visual_pred_color):
     image_a = gt_color
     image_b = visual_pred_color
 
@@ -249,7 +249,7 @@ def cat_pred_gt(visual_pred_color, mask_vis_output, file_name, dataset_name='cit
     black_pixels = np.all(gt_img == [0, 0, 0], axis=-1)
     gt_img[black_pixels] = [255, 255, 255]
 
-    error_map = get_error_map(gt_img.astype("uint8"), visual_pred_color)
+    error_map = get_error_map_red_green(gt_img.astype("uint8"), visual_pred_color)
 
     h,w,c = rgb_img.shape
     black_bar_shape = (10, w, c)
@@ -310,7 +310,8 @@ def draw_text(mask, mask_img, classes, score):
         if mid_1 > 1995:
             mid_1 = 1995
         text_position = (mid_1, mid_0)
-        cv2.putText(mask_img, classes + str(round(score.item(), 2)), text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+        # cv2.putText(mask_img, classes + str(round(score.item(), 2)), text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+        cv2.putText(mask_img, classes + str(round(score.item(), 2)), text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
     return mask_img
 
 def save_error_map(mask_img, visual_pred, error_map_filename, file_name, out_filename, dataset_name):
