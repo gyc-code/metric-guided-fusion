@@ -392,6 +392,7 @@ class DefaultTrainer(TrainerBase):
             trainer=weakref.proxy(self),
         )
         self.start_iter = 0
+        self.iter = None
         self.max_iter = cfg.SOLVER.MAX_ITER
         self.cfg = cfg
 
@@ -452,7 +453,7 @@ class DefaultTrainer(TrainerBase):
             ret.append(hooks.PeriodicCheckpointer(self.checkpointer, cfg.SOLVER.CHECKPOINT_PERIOD))
 
         def test_and_save_results():
-            self._last_eval_results = self.test(self.cfg, self.model)
+            self._last_eval_results = self.test(self.cfg, self.model, iter=self.iter)
             return self._last_eval_results
 
         # Do evaluation after checkpointer, because then if it fails,

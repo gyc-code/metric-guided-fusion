@@ -46,6 +46,7 @@ from detectron2.evaluation import (
     CityscapesCustomInstanceEvaluator,
     CityscapesCustomSemSegEvaluator,
     CityscapesCustomInstance2SemSegEvaluator,
+    Kitti360CustomInstanceEvaluator,
 )
 from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
 from detectron2.solver.build import maybe_add_gradient_clipping
@@ -73,7 +74,6 @@ class Trainer(DefaultTrainer):
     """
     Extension of the Trainer class adapted to MaskFormer.
     """
-
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         """
@@ -118,6 +118,11 @@ class Trainer(DefaultTrainer):
             evaluator_list.append(InstanceSegEvaluator(dataset_name, output_dir=output_folder))
         if evaluator_type == "mapillary_vistas_panoptic_seg" and cfg.MODEL.MASK_FORMER.TEST.SEMANTIC_ON:
             evaluator_list.append(SemSegEvaluator(dataset_name, distributed=True, output_dir=output_folder))
+        if evaluator_type == "kitti360_instance":
+            assert (
+                torch.cuda.device_count() > comm.get_rank()
+            ), "Kitti360CustomInstanceEvaluator currently do not work with multiple machines."
+            return Kitti360CustomInstanceEvaluator(dataset_name, cfg)
         # Cityscapes
         if evaluator_type == "cityscapes_instance":
             assert (
@@ -294,7 +299,7 @@ class Trainer(DefaultTrainer):
         return res
 
     @classmethod
-    def test(cls, cfg, model, evaluators=None, eval_only=False):
+    def test(cls, cfg, model, evaluators=None, eval_only=False, iter=None):
         """
         Evaluate the given model. The given model is expected to already contain
         weights to evaluate.
@@ -309,6 +314,7 @@ class Trainer(DefaultTrainer):
         Returns:
             dict: a dict of result metrics
         """
+
         logger = logging.getLogger(__name__)
         if isinstance(evaluators, DatasetEvaluator):
             evaluators = [evaluators]
@@ -326,11 +332,11 @@ class Trainer(DefaultTrainer):
                 evaluator = evaluators[idx]
             else:
                 try:
-                    if eval_only:
+                    if eval_only or iter is None:
                         evaluator = cls.build_evaluator(cfg, dataset_name, output_folder=cfg.OUTPUT_DIR)
                     else:
                         evaluator = cls.build_evaluator(cfg, dataset_name,
-                                                    output_folder=os.path.join(cfg.OUTPUT_DIR, cls.iter))
+                                                    output_folder=os.path.join(cfg.OUTPUT_DIR, str(iter)))
                 except NotImplementedError:
                     logger.warn(
                         "No evaluator found. Use `DefaultTrainer.test(evaluators=)`, "
@@ -347,7 +353,7 @@ class Trainer(DefaultTrainer):
                     results_i
                 )
                 logger.info("Evaluation results for {} in csv format:".format(dataset_name))
-                print_csv_format(results_i)
+                #print_csv_format(results_i)
 
         if len(results) == 1:
             results = list(results.values())[0]
