@@ -151,8 +151,8 @@ class CityscapesInstanceEvaluator(CityscapesEvaluator):
         if comm.get_rank() > 0:
             return
         import cityscapesscripts.evaluation.evalInstanceLevelSemanticLabeling as cityscapes_eval
-
         self._logger.info("Evaluating results under {} ...".format(self._temp_dir))
+
 
         # set some global states in cityscapes evaluation API, before evaluating
         cityscapes_eval.args.predictionPath = os.path.abspath(self._temp_dir)
@@ -175,13 +175,11 @@ class CityscapesInstanceEvaluator(CityscapesEvaluator):
             predictionImgList.append(cityscapes_eval.getPrediction(gt, cityscapes_eval.args))
         try:
             results = cityscapes_eval.evaluateImgLists(
-                predictionImgList, groundTruthImgList, cityscapes_eval.args
+                predictionImgList, groundTruthImgList, cityscapes_eval.args, self._logger
             )["averages"]
 
             ret = OrderedDict()
-            # ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100, "AP50m": results["allAp50m"] * 100, 
-                           "AP100m": results["allAp100m"] * 100, "AP50%50m": results["allAp50%50m"] * 100}
+            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
             self._working_dir.cleanup() 
             return ret
         except:
