@@ -18,7 +18,7 @@ MODEL:
   SEM_SEG_HEAD:
     IN_FEATURES: ["res7", "res11", "res15", "res23"]
     DEFORMABLE_TRANSFORMER_ENCODER_IN_FEATURES: ["res11", "res15", "res23"]
-  WEIGHTS: "/home/yguo/Documents/other/inst_seg_4VFM/pretrain/dinov2_512x512_converted_detectron2.pth" #"./pretrain/dinov2_vitl14_pretrain.pth"
+  WEIGHTS: "pretrain/dinov2_512x512_converted_detectron2.pth" #"./pretrain/dinov2_vitl14_pretrain.pth"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
   MASK_FORMER:
@@ -40,9 +40,9 @@ INPUT:
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 512)  # 1024*1024 will cause shape mismatch in UDA
+    SIZE:  (512, 512)
 DATASETS:
-  TRAIN: ("cityscapes_fine_instance_seg_val",) #("urbansyn_instance_seg_train",)
+  TRAIN: ("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
   #('urbansyn_category_human_cycle_instance_seg_train',)
   # ("uda_syn_real_instance_seg_train",)
   #("synscapes_human_cycle_instance_seg_train",)
@@ -56,6 +56,5 @@ DATASETS:
   TEST: ("cityscapes_fine_instance_seg_val",)
 TEST:
   EVAL_PERIOD: 40000
-OUTPUT_DIR: "./output/urbansyn_from_scratch"
+OUTPUT_DIR: "./output_vlm/cs_from_dinov2"
 SAVE_INSTANCE_VISUALIZATION: True
-# VIS_PERIOD: 1

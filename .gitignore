@@ -3,12 +3,15 @@ output
 instant_test_output
 inference_test_output
 
+bash_commond/
+output_vlm/
 *.txt
 # *.yaml
 # *.sh
 # datasets/
 datasets_bp/
-tmp/
+tmp
+*sh
 *.png
 !/template/*.png
 
