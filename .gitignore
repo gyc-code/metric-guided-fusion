@@ -2,10 +2,11 @@
 output
 instant_test_output
 inference_test_output
-
+bash_commond/
+tmp
 *.txt
 # *.yaml
-# *.sh
+i# *.sh
 # datasets/
 datasets_bp/
 tmp/
