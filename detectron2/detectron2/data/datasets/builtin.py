@@ -237,7 +237,7 @@ def register_all_cityscapes(root):
 
         inst_key = key.format(task="instance_seg")
         data_name = key.split('_')[0]
-        if 'cityscapes' in  inst_key:
+        if 'cityscapes_fine' in  inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
@@ -260,7 +260,7 @@ def register_all_cityscapes(root):
                     ),
                 )
                 
-        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key or 'kitti360' in inst_key:
+        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key or 'kitti360_' in inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
@@ -287,7 +287,7 @@ def register_all_cityscapes(root):
             MetadataCatalog.get(inst_key).set(
                 image_dir=image_dir, gt_dir=gt_dir, evaluator_type="kitti360_instance", **meta  #"cityscapes_instance"  cityscapes_instance2sem_seg
             )
-        else 'cityscapes' in  inst_key:
+        else:
             MetadataCatalog.get(inst_key).set(
                 image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_instance", **meta 
             )
@@ -305,25 +305,72 @@ def register_all_cityscapes(root):
         )
 
 _RAW_UDA_CITYSCAPES_SPLITS = {
-    "uda_syn_real_{task}_train": {
+    #########  for eval on cityscapes
+    "uda_syn_real_{task}_train_eval_cityscapes": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
         # 'source':("img_3time_urban_synscapes_instance.txt", "label_3time_urban_synscapes_instance.txt"), 
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
         # 'target':("cityscapes/leftimage8bit_train_small.txt", "cityscapes/gtFine_train_small.txt")
 
         },
-    "uda_syn_real_human_cycle_{task}_train": {
-        # 'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
-        # 'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+    "uda_urbansyn_syn_real_human_cycle_{task}_train_eval_cityscapes": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
         },
-    "uda_syn_real_vehicle_{task}_train": {
-
+    "uda_urbansyn_syn_real_vehicle_{task}_train_eval_cityscapes": {
         'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
-        # 'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
-        # 'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
         'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+
+    "uda_synscapes_syn_real_human_cycle_{task}_train_eval_cityscapes": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    "uda_synscapes_syn_real_vehicle_{task}_train_eval_cityscapes": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    
+    "uda_synthia_syn_real_human_cycle_{task}_train_eval_cityscapes": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+    "uda_synthia_syn_real_vehicle_{task}_train_eval_cityscapes": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+        'target':("cityscapes/leftimage8bit_train.txt", "cityscapes/gtFine_train.txt")
+        },
+
+    #########  for eval on kitti360
+    "uda_syn_real_{task}_train_eval_kitti360": {
+        'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+
+        },
+    "uda_urbansyn_syn_real_human_cycle_{task}_train_eval_kitti360": {
+        'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+        },
+    "uda_urbansyn_syn_real_vehicle_{task}_train_eval_kitti360": {
+        'source':("urbansyn_total_label/img_urbansyn_instance.txt", "urbansyn_total_label/label_urbansyn_instance.txt"), 
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+        },
+
+    "uda_synscapes_syn_real_human_cycle_{task}_train_eval_kitti360": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+        },
+    "uda_synscapes_syn_real_vehicle_{task}_train_eval_kitti360": {
+        'source':("synscapes/img_synscapes_instance.txt", "synscapes/label_synscapes_instance.txt"), 
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+        },
+    
+    "uda_synthia_syn_real_human_cycle_{task}_train_eval_kitti360": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
+        },
+    "uda_synthia_syn_real_vehicle_{task}_train_eval_kitti360": {
+        'source':("synthia/img_synthia_instance.txt", "synthia/label_synthia_instance.txt"),
+        'target':("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt")
         },
 }
 
@@ -364,9 +411,15 @@ def register_all_uda_cityscapes(root): # design by cindy , only for instance so 
                     ),
                 )
 
+        if 'kitti360' in  inst_key:
             MetadataCatalog.get(inst_key).set(
                 #cindy add :cityscapes_instance2sem_seg  , origin : cityscapes_instance
                 source_image_dir=source_image_dir, source_gt_dir=source_gt_dir, target_image_dir=target_image_dir, evaluator_type="kitti360_instance", **meta) #cityscapes_instance
+
+        else:
+            MetadataCatalog.get(inst_key).set(
+                #cindy add :cityscapes_instance2sem_seg  , origin : cityscapes_instance
+                source_image_dir=source_image_dir, source_gt_dir=source_gt_dir, target_image_dir=target_image_dir, evaluator_type="cityscapes_instance", **meta) #cityscapes_instance
 
     # print('finish register')
             
