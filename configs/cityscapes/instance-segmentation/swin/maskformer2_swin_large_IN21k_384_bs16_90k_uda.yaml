@@ -40,7 +40,7 @@ INPUT:
     SIZE:  (512, 1024)  # 1024*1024 will cause shape mismatch in UDA
 
 DATASETS:
-  TRAIN: ('urbansyn_category_human_cycle_instance_seg_train_eval_cityscapes',) 
+  TRAIN: ('cityscapes_fine_instance_seg_train',) 
   # ("uda_syn_real_instance_seg_train_eval_cityscapes",)
   #("synscapes_human_cycle_instance_seg_train_eval_cityscapes",)
   #("synscapes_instance_seg_train_eval_cityscapes",) 

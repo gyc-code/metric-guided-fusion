@@ -260,7 +260,7 @@ def register_all_cityscapes(root):
                     ),
                 )
                 
-        if 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key or 'kitti360_' in inst_key:
+        elif 'urbansyn' in  inst_key or 'synscapes' in  inst_key or 'synthia' in inst_key or 'kitti360_' in inst_key:
             if '_human_cycle_' in inst_key:
                 DatasetCatalog.register(
                     inst_key,
