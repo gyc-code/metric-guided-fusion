@@ -209,6 +209,8 @@ _RAW_CITYSCAPES_SPLITS = {
     "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
     "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image_all.txt", "kitti360/2013_05_28_drive_val_frames_label_all.txt"),
     
+    
+    
     ######### for category experiments, keep
     # "urbansyn_category_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
     # "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
@@ -232,6 +234,7 @@ def register_all_cityscapes(root):
         meta = _get_builtin_metadata("cityscapes")
         image_dir = os.path.join(root, image_dir)
         gt_dir = os.path.join(root, gt_dir)
+
         inst_key = key.format(task="instance_seg")
         data_name = key.split('_')[0]
         if 'cityscapes_fine' in  inst_key:
@@ -279,29 +282,6 @@ def register_all_cityscapes(root):
                         x, y, data_name=data_name, category='human_cycle_vehicle', from_json=True, to_polygons=True
                     ),
                 )
-        else:
-            if 'cityscapes' in  inst_key:
-                if '_human_cycle_' in inst_key:
-                    DatasetCatalog.register(
-                        inst_key,
-                        lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
-                            x, y, category='human_cycle', from_json=True, to_polygons=True
-                        ),
-                    )
-                elif '_vehicle_' in inst_key:
-                    DatasetCatalog.register(
-                        inst_key,
-                        lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
-                            x, y, category='vehicle', from_json=True, to_polygons=True
-                        ),
-                    )
-                else:
-                    DatasetCatalog.register(
-                        inst_key,
-                        lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
-                            x, y, category='human_cycle_vehicle', from_json=True, to_polygons=True
-                        ),
-                    )
 
         if 'kitti360' in  inst_key:
             MetadataCatalog.get(inst_key).set(
