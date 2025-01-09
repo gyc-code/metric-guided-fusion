@@ -209,8 +209,6 @@ _RAW_CITYSCAPES_SPLITS = {
     "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
     "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image_all.txt", "kitti360/2013_05_28_drive_val_frames_label_all.txt"),
     
-    
-    
     ######### for category experiments, keep
     # "urbansyn_category_vehicle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
     # "urbansyn_category_human_cycle_{task}_train": ("urbansyn_total_label/img_urbansyn_instance_category_train.txt", "urbansyn_total_label/label_urbansyn_instance_category_train.txt"),
