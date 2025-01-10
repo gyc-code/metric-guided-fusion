@@ -4,11 +4,11 @@ MODEL:
     # FREEZE_AT: 0
     NAME: "D2dinoV2"
   DINOV2:
-    PRETRAIN_IMG_SIZE: 512
-    PATCH_SIZE: 16
-    EMBED_DIM: 1024
-    DEPTHS: 24
-    NUM_HEADS: 16
+    PRETRAIN_IMG_SIZE: 518
+    PATCH_SIZE: 14
+    EMBED_DIM: 1536
+    DEPTHS: 40
+    NUM_HEADS: 24
     MLP_RATIO: 4
     QKV_BIAS: True
     FFN_BIAS: True
@@ -41,7 +41,7 @@ INPUT:
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 512)
+    SIZE:  (518, 518)
 DATASETS:
   TRAIN: ("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
   #('urbansyn_category_human_cycle_instance_seg_train',)

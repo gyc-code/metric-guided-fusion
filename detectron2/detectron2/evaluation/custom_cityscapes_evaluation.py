@@ -188,7 +188,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
             predictionImgList.append(cityscapes_eval.getPrediction(gt, cityscapes_eval.args))
         try:
             results = cityscapes_eval.evaluateImgLists(
-                predictionImgList, groundTruthImgList, cityscapes_eval.args
+                predictionImgList, groundTruthImgList, cityscapes_eval.args, self._logger
             )["averages"]
 
             ret = OrderedDict()

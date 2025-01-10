@@ -19,15 +19,20 @@ import detectron2.utils.comm as comm
 from detectron2.utils.events import EventStorage, get_event_storage
 from detectron2.utils.logger import _log_api_usage
 import cv2
+from detectron2.structures import Instances, Boxes
+import torch.nn.functional as F
 
-from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix, remove_ego_car_logo, break_source_target_match, visulize_color_instances
+from .uda_instance_utils import source_instance_paste_to_target_mix, target_instance_paste_to_source_mix, data_lab_transform, \
+remove_ego_car_logo, visulize_color_instances, correct_label_by_CLIP
 
 __all__ = ["HookBase", "TrainerBase", "SimpleTrainer", "AMPTrainer"]
-TOTAL_LOSS = True
 
+MINI_AREA_cityscapes =300
+MINI_AREA_KITTI360 = 300
 VISUL = False
-ITERATION_TO_START_UDA = 10000
+ITERATION_TO_START_UDA = 0
 MINI_BATCH_LOSS = True
+USE_CLIP = False
 
 class HookBase:
     """
@@ -489,44 +494,25 @@ class AMPTrainer(SimpleTrainer):
         self.precision = precision
         self.log_grad_scaler = log_grad_scaler
         ''' cindy add ema'''
-        # import copy
-        # self.ema_model = copy.deepcopy(model).eval() # init , no weight load
         self.source_rare_class_samples = []
         # self.target_rare_class_samples = []
         self.local_iter = 0
         self.alpha = 0.999
         timestamp = time.time()
         human_readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d-%H:%M:%S')
-        self.folder_name = './debug_in_img_' + human_readable_time+ '/'
-        # if not os.path.exists(self.folder_name):
-        #     # shutil.rmtree(folder_name)
-        #     os.makedirs(self.folder_name)
-        #     print('make a new : ',self.folder_name)
+        self.folder_name = './output/0000debug_in_img_' + human_readable_time+ '/'
         dir = pathlib.Path(self.folder_name)
         dir.mkdir(parents=True, exist_ok=True)
 
     def _init_ema_weights(self):
         self.ema_model = copy.deepcopy(self.model).eval() # init , no weight load
-
     def _update_ema(self, iter):
-        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
-        #   the update is too slow
-        # for key in self.model.state_dict().keys():
-        #     ema_param = self.ema_model.state_dict()[key]
-        #     param = self.model.state_dict()[key]
-        #     if not param.data.shape:  # scalar tensor
-        #         ema_param.data = alpha_teacher * ema_param.data + (1 - alpha_teacher) * param.data
-        #     else:
-        #         ema_param.data[:] = \
-        #             alpha_teacher * ema_param[:].data[:] + \
-        #             (1 - alpha_teacher) * param[:].data[:]
-        #     print(key, ema_param.data[:])
-            
+        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)  
         #   try update this way to speedup
         with torch.no_grad():
             for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
                 ema_param.data.mul_(alpha_teacher).add_(param.data, alpha=1 - alpha_teacher)
-                    
+
     def run_step(self):
         """
         Implement the AMP training logic.
@@ -534,33 +520,28 @@ class AMPTrainer(SimpleTrainer):
         assert self.model.training, "[AMPTrainer] model was changed to eval mode!"
         assert torch.cuda.is_available(), "[AMPTrainer] CUDA is required for AMP training!"
         from torch.cuda.amp import autocast
-
         start = time.perf_counter()
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
         self.local_iter += 1
 
+        
         if 'source' in data[0] and self.local_iter > ITERATION_TO_START_UDA:# cindy add 
             batch_size = len(data)
-            # cindy: shuffle source-target match in a batch
-            # if batch_size > 1:
-            #     print('iter: ', self.local_iter)
-            #     break_source_target_match(data)
+            assert batch_size == 3, f"Batch size must be 3, but got {batch_size}"
             # Init/update ema model
             if self.local_iter == ITERATION_TO_START_UDA + 1:
                 self._init_ema_weights()
             self._update_ema(self.local_iter)
-
-            # source training
-            if not MINI_BATCH_LOSS:
-                self.optimizer.zero_grad()
-                with autocast(dtype=self.precision):
-                    source_loss_dict = self.model(data)
-                    if isinstance(source_loss_dict, torch.Tensor):
-                        source_losses = source_loss_dict
-                        source_loss_dict = {"total_source_loss": source_loss_dict}
-                    else:
-                        source_losses = sum(source_loss_dict.values())
+            
+            if "cityscapes" in data[0]['target']['file_name']:
+                mini_area= MINI_AREA_cityscapes
+            elif "KITTI360" in data[0]['target']['file_name']:
+                mini_area= MINI_AREA_KITTI360
+            else:
+                mini_area= 300
+            ''' do LAB transformation for source image from source to target '''
+            data = data_lab_transform(data)
             
             ''' cindy : generate pseudo label for target and do mix '''
             with torch.no_grad():
@@ -573,7 +554,7 @@ class AMPTrainer(SimpleTrainer):
                 pseudo_instances_num_list = []
                 for i in range(len(pseudo_labels)): # filter pseudo instances which score are low
                     template_img = data[i]['target']['template_img']
-                    pseudo_instances = pseudo_labels[i]['instances']
+                    pseudo_instances = pseudo_labels[i]['instances'] 
                     pseudo_labels[i]['instances'] = pseudo_instances[pseudo_instances.scores.cpu() > 0.9]
                     update_pseudo_label = remove_ego_car_logo(pseudo_labels[i]['instances'], template_img)
                     if update_pseudo_label is None:
@@ -587,91 +568,22 @@ class AMPTrainer(SimpleTrainer):
             # pseudo instance use to mix
             any_greater_than_zero = any(x > 0 for x in pseudo_instances_num_list)
             if any_greater_than_zero:
-                data_ori = copy.deepcopy(data[0])
-                data_copy = copy.deepcopy(data)
-                if VISUL:
-                    self.model.training = False
-                    data[0]['source']['height'] = 1024
-                    data[0]['source']['width'] = 1024
+                if pseudo_instances_num_list[1] > 0:
+                    data[1], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[1], mini_area, self.local_iter, self.folder_name, self.source_rare_class_samples)
+                    # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
+                if pseudo_instances_num_list[2] > 0:
+                    data[2] = target_instance_paste_to_source_mix(data[2], mini_area, self.local_iter, self.folder_name)
 
-                    source = self.model(data)
-                    source_instances = source[0]['instances']
-                    source_instances = source_instances[source_instances.scores.cpu() > 0.8]
-
-                    source_instances_img = visulize_color_instances(source_instances)
-                    file_id = data[0]['target']['image_id'].split('.')[0]
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_source_inference_color_instance.jpg', source_instances_img)
-                    del source, source_instances, source_instances_img
-                   
-                for i in range(batch_size):
-                    if pseudo_instances_num_list[i] > 0:
-                        data[i], self.source_rare_class_samples = source_instance_paste_to_target_mix(data[i], self.local_iter, self.folder_name, self.source_rare_class_samples)
-                        # data_copy[i], self.target_rare_class_samples = target_instance_paste_to_source_mix(data_copy[i], pseudo_labels_copy[i], self.local_iter, self.folder_name, self.target_rare_class_samples)
-                        data_copy[i] = target_instance_paste_to_source_mix(data_copy[i], self.local_iter, self.folder_name)
-
-                ''' cindy: train with source2target mix data '''
-                ### cancle this train
-                if VISUL:
-                    self.model.training = False
-                    data[0]['source']['height'] = 1024
-                    data[0]['source']['width'] = 1024
-                    data_copy[0]['source']['height'] = 1024
-                    data_copy[0]['source']['width'] = 1024
-                    source_to_target_mix = self.model(data)
-                    target_to_source_mix = self.model(data_copy)
-                    source_to_target_mix_instances = source_to_target_mix[0]['instances']
-                    target_to_source_mix_instances = target_to_source_mix[0]['instances']
-
-                    source_to_target_mix_instances = source_to_target_mix_instances[source_to_target_mix_instances.scores.cpu() > 0.8]
-                    target_to_source_mix_instances = target_to_source_mix_instances[target_to_source_mix_instances.scores.cpu() > 0.8]
-                    
-                    source_to_target_mix_instances_img = visulize_color_instances(source_to_target_mix_instances)
-                    target_to_source_mix_instances_img = visulize_color_instances(target_to_source_mix_instances)
-                    file_id = data[0]['target']['image_id'].split('.')[0]
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_s2t_inference_color_instance.jpg', source_to_target_mix_instances_img)
-                    cv2.imwrite(self.folder_name + file_id + '_' + str(self.local_iter)+ '_t2s_inference_color_instance.jpg', target_to_source_mix_instances_img)
-                    del source_to_target_mix, source_to_target_mix_instances
-                    del target_to_source_mix, target_to_source_mix_instances
-
-                if not MINI_BATCH_LOSS:
-                    self.model.training = True
-                    mix_loss_dict = self.model(data)
-                    if isinstance(mix_loss_dict, torch.Tensor):
-                        s2t_mix_losses = mix_loss_dict
-                        loss_dict = {"total_mix_loss": mix_loss_dict}
+                ''' use mini batch loss ,one batch data=data0: source+ data1: s2t+ data2: t2s '''
+                self.optimizer.zero_grad()
+                self.model.train()
+                with autocast(dtype=self.precision):
+                    unite_loss_dict = self.model(data)
+                    if isinstance(unite_loss_dict, torch.Tensor):
+                        unite_loss = unite_loss_dict
+                        unite_loss_dict = {"total_source_loss": unite_loss_dict}
                     else:
-                        s2t_mix_losses = sum(mix_loss_dict.values())
-
-                    ''' cindy: train with target2source mix data '''
-                    t2s_mix_loss_dict = self.model(data_copy)
-                    if isinstance(t2s_mix_loss_dict, torch.Tensor):
-                        t2s_mix_losses = t2s_mix_loss_dict
-                        loss_dict = {"total_mix_loss": t2s_mix_loss_dict}
-                    else:
-                        t2s_mix_losses = sum(t2s_mix_loss_dict.values())
-                    # unite_loss = 0.6 * t2s_mix_losses + 0.4 * s2t_mix_losses
-                    # unite_loss = s2t_mix_losses # ablation
-                    # unite_loss = t2s_mix_losses # ablation
-                    unite_loss = 0.5 * source_losses + 0.25 * t2s_mix_losses + 0.25 * s2t_mix_losses
-                    # unite_loss = 0.5 * t2s_mix_losses + 0.5 * s2t_mix_losses
-                    # unite_loss = t2s_mix_losses
-                    unite_loss_dict = t2s_mix_loss_dict
-                else:
-                    ''' use mini batch loss ,one batch data=source+s2t+t2s ''' 
-                    self.optimizer.zero_grad()
-                    self.model.training = True
-                    assert batch_size % 3 == 0, f"Batch size must be a multiple of 3, but got {batch_size}"
-                    if batch_size == 3:
-                        data[0] = data_ori
-                        # data[1] = data[1]
-                        data[2] = data_copy[2]
-                    with autocast(dtype=self.precision):
-                        unite_loss_dict = self.model(data)
-                        if isinstance(unite_loss_dict, torch.Tensor):
-                            unite_loss = unite_loss_dict
-                            unite_loss_dict = {"total_source_loss": unite_loss_dict}
-                        else:
-                            unite_loss = sum(unite_loss_dict.values())
+                        unite_loss = sum(unite_loss_dict.values())
 
                 self.grad_scaler.scale(unite_loss).backward()
                 self.grad_scaler.step(self.optimizer)
@@ -686,19 +598,13 @@ class AMPTrainer(SimpleTrainer):
                 storage = get_event_storage()
                 storage.put_scalar("[metric]grad_scaler", self.grad_scaler.get_scale())
             self.after_backward()
-
-
         else:
             if 'source' in data[0]: # when local_iter < ITERATION_TO_START_UDA, also use only source training
                 data = [x['source'] for x in data]
-                if random.randint(0, 1): # make the source only train using somethimes with far_away_image TODO: see improve far object instance  or not ?
-                    for x in data:
-                        x['image'] = x['far_region_image']
-                        x['instances'] = x['far_region_instances']
 
             if self.zero_grad_before_forward:
                 self.optimizer.zero_grad()
-            with autocast():
+            with autocast(dtype=self.precision):
                 loss_dict = self.model(data)
                 if isinstance(loss_dict, torch.Tensor):
                     losses = loss_dict
