@@ -48,7 +48,7 @@ from utils import *
 # constants
 
 EVAL=True
-VISUAL = False
+VISUAL = True
 ONLY_VAL = False
 
 
@@ -83,7 +83,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category_kitti/test/',
+        default='visual_instance/urbansyn-kitti/only_source/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -100,7 +100,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/urbansyn_full/model_final.pth'],
-        default=['MODEL.WEIGHTS','./output/category/synthia_full/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/a_kitti_swinL/urbansyn_sourceponly_kitti_40k/model_final.pth'],
         
         
         nargs=argparse.REMAINDER,
@@ -108,7 +108,7 @@ def get_parser():
     return parser
 
 
-def process_one(path, demo_human_cycle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name='cityscapes'):
+def process_one(path, demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name='cityscapes'):
     # use PIL, to be consistent with evaluation
     # print('-')
     path = str(path)
@@ -119,17 +119,18 @@ def process_one(path, demo_human_cycle, _metadata, result_save_folder, visul_sav
     # print('path of img is : ', path)
     img = read_image(path, format="BGR")
     out_filename = os.path.join(visul_save_folder, basename+'.png')
-    predictions_fuse, visualized_output, visualizer = demo_human_cycle.run_on_image_for_instance(img)
-    if VISUAL:
-        visualized_output.save(out_filename.replace('.png', '_mask.png'))
+    predictions, visualized_output, visualizer = demo.run_on_image_for_instance(img)
 
     cpu_device = torch.device("cpu")
-    instances = predictions_fuse['instances'].to(cpu_device)
-    """ save instances for eval """
+    instances = predictions['instances'].to(cpu_device)
+    instances = instances[instances.scores.cpu() > 0.85]
     num_instances = len(instances)
+    print('num_instances:', num_instances)
 
-            
+    """ save instances for eval """
     if VISUAL and num_instances != 0:
+        mask_vis_output = visualizer.draw_instance_predictions(predictions=instances)
+        mask_vis_output.save(out_filename.replace('.png', '_mask.png'))
         mask_img, visual_pred, error_map_filename = visual_instance_mask(instances, img, visul_save_folder, basename, out_filename)
 
     save_result(num_instances, pred_txt, VISUAL, visual_pred, instances, _metadata, name2label,\
@@ -188,3 +189,5 @@ if __name__ == "__main__":
             # eval on kitti
             _temp_dir = result_save_folder
             evaluate_kitti(_temp_dir)
+        shutil.rmtree(result_save_folder)
+        

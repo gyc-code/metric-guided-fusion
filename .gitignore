@@ -7,7 +7,7 @@ bash_commond/
 output_vlm/
 *.txt
 # *.yaml
-# *.sh
+*.sh
 # datasets/
 datasets_bp/
 tmp

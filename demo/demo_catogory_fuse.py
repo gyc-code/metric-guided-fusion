@@ -43,12 +43,12 @@ from cityscapesscripts.helpers.labels import name2label
 
 from utils import *
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 # constants
 
 EVAL = True
-VISUAL = False
+VISUAL = True
 ONLY_VAL = False
 
 
@@ -76,7 +76,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/category_kitti/category_synscapes_500_on_kitti360/',
+        default='visual_instance/urbansyn-kitti/uda4inst/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -93,7 +93,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/category/synscapes_human_cycle/model_final.pth ./output/category/synscapes_vehicle/model_final.pth'],
+        default=['MODEL.WEIGHTS','./output/a_category_4UDA_swinL/uda_kitti_urbansyn_human_cycle_large1500_instance_or_patch_LAB/model_best.pth ./output/a_category_4UDA_swinL/uda_kitti_urbansyn_vehicle_large1500_instance_or_patch_LAB/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_final.pth ./output/category/urbansyn_vehicle/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/synthia_human_cycle/model_final.pth ./output/category/synthia_vehicle/model_final.pth'],
         
@@ -116,25 +116,30 @@ def process_one(path, demo_human_cycle, demo_vehicle, _metadata, result_save_fol
     predictions_vehicle, visualized_output_vehicle, visualizer = demo_vehicle.run_on_image_for_instance(img_copy)
     
     if VISUAL:
+        # visualized_output.save(out_filename.replace('.png', '_mask.png'))
         visualized_output_human_cycle.save(out_filename.replace('.png', '_human_cyc.png'))
         visualized_output_vehicle.save(out_filename.replace('.png', '_vehicle.png'))
 
     predictions_fuse = Instances.cat([predictions_human_cycle['instances'], predictions_vehicle['instances']])
     cpu_device = torch.device("cpu")
     instances = predictions_fuse.to(cpu_device)
+    instances = instances[instances.scores.cpu() > 0.85]
+
     num_instances = len(instances)
+    print('num_instances:', num_instances)
+
     
     """ save instances for eval """
     predictions_human_cycle = demo_human_cycle.predictor(img)
     predictions_vehicle = demo_vehicle.predictor(img_copy)
-
     
     if VISUAL and num_instances != 0:
+        mask_vis_output = visualizer.draw_instance_predictions(predictions=instances)
+        mask_vis_output.save(out_filename.replace('.png', '_mask.png'))
         mask_img, visual_pred, error_map_filename = visual_instance_mask(instances, img, visul_save_folder, basename, out_filename)
 
     save_result(num_instances, pred_txt, VISUAL, visual_pred, instances, _metadata, name2label,\
         result_save_folder, basename, file_name, dataset_name, error_map_filename, out_filename, mask_img)
-
 
 def process_all(inputs, demo_human_cycle, demo_vehicle, result_save_folder, visul_save_folder, error_map_save_folder, target):
     _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
@@ -197,3 +202,4 @@ if __name__ == "__main__":
         if 1:
             _temp_dir = result_save_folder
             evaluate_kitti(_temp_dir)
+        shutil.rmtree(result_save_folder)

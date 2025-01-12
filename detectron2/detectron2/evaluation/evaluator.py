@@ -167,7 +167,6 @@ def inference_on_dataset(
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
-
             start_eval_time = time.perf_counter()
             evaluator.process(inputs, outputs)
             total_eval_time += time.perf_counter() - start_eval_time

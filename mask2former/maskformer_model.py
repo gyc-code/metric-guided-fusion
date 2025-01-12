@@ -14,6 +14,10 @@ from detectron2.modeling.backbone import Backbone
 from detectron2.modeling.postprocessing import sem_seg_postprocess
 from detectron2.structures import Boxes, ImageList, Instances, BitMasks
 from detectron2.utils.memory import retry_if_cuda_oom
+# cindy add
+from detectron2.structures import BitMasks
+from detectron2.layers import batched_nms
+import math
 
 from .modeling.criterion import SetCriterion
 from .modeling.matcher import HungarianMatcher
@@ -435,14 +439,49 @@ class MaskFormer(nn.Module):
         scores = F.softmax(mask_cls, dim=-1)[:, :-1]
         labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
         # scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.num_queries, sorted=False)
-        scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.test_topk_per_image, sorted=False)
-        labels_per_image = labels[topk_indices]
+        # cindy comment: score is 200*8, flatten is 1600 in total, keep top 100 instances (maybe make too much false positive)
+        # cindy comment: possible to keep more than 1 big score for same instance
+        scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.test_topk_per_image, sorted=False) 
+        
+        ''' replace the above line with the following line to keep better instances'''
+        # # Step 1: 计算每个掩码的面积
+        # mask_areas = (mask_pred > 0).float().flatten(1).sum(dim=1)
+        # # Step 2: 设定最小面积阈值，并根据面积进行筛选
+        # min_area_threshold = 10  # 根据数据集和需求调整阈值
+        # valid_indices = torch.nonzero(mask_areas > min_area_threshold, as_tuple=False).squeeze(1)  # 保留tensor类型的索引
+        # # Step 3: 只对筛选后的有效掩码进行排序，并选出前 top k
+        # valid_scores = scores.flatten(0, 1).index_select(0, valid_indices)   # 获取这些掩码对应的分数
+        # # 选出前 self.test_topk_per_image 个结果
+        # # 检查 valid_scores 的数量是否小于 self.test_topk_per_image
+        # num_valid_scores = valid_scores.size(0)  # 有效分数的数量
+        # topk_number = min(self.test_topk_per_image, num_valid_scores)  # 动态调整 topk 数量
+        # # 选出前 topk_number 个结果
+        # scores_per_image, topk_relative_indices = valid_scores.topk(topk_number, sorted=False)
 
+        # # 转换相对索引为原始索引
+        # topk_indices = valid_indices.index_select(0, topk_relative_indices)
+        ''' above: replace  to keep better instances'''
+        
+        labels_per_image = labels[topk_indices]
+        # cindy comment: topk_indices back to 100 object
         topk_indices = topk_indices // self.sem_seg_head.num_classes
         # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
         mask_pred = mask_pred[topk_indices]
-        # np.save("./vehicle_feature/" + str(self.local_count) + "_topk_indices.npy", topk_indices.cpu())
+        
+        ############# cindy find repeat instances
+        # unique_values, counts = topk_indices.unique(return_counts=True)
+        # # 找到重复值（计数大于1的值）
+        # duplicate_values = unique_values[counts > 1]
+        # # 创建布尔掩码，标记重复值的位置为True
+        # mask = torch.isin(topk_indices, duplicate_values)
+        # print(len(topk_indices)-len(unique_values))
+        # print(mask)
+        # labels_per_image[mask],  scores_per_image[mask]
+        ############# cindy find repeat instances
 
+        # mask_pred = mask_pred[unique_indices]
+
+        # np.save("./vehicle_feature/" + str(self.local_count) + "_topk_indices.npy", topk_indices.cpu())
         # if this is panoptic segmentation, we only keep the "thing" classes
         if self.panoptic_on:
             keep = torch.zeros_like(scores_per_image).bool()
@@ -471,6 +510,11 @@ class MaskFormer(nn.Module):
         mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * result.pred_masks.flatten(1)).sum(1) / (result.pred_masks.flatten(1).sum(1) + 1e-6)
         result.scores = scores_per_image * mask_scores_per_image
         result.pred_classes = labels_per_image
+        # cindy add 
+        # result.class_scores = scores_per_image
+        # result.mask_scores = mask_scores_per_image
+        # result.scores_8 = scores[topk_indices]
+        
         # np.save("./vehicle_feature/" + str(self.local_count) + "_labels_per_image.npy", labels_per_image.cpu())
         # np.save("./vehicle_feature/" + str(self.local_count) + "_scores.npy", result.scores.cpu())
         return result
