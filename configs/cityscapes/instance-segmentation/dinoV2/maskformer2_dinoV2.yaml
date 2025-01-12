@@ -27,7 +27,7 @@ MODEL:
     FROZE_BACKBONE: False
 SOLVER:
   IMS_PER_BATCH: 6
-  CHECKPOINT_PERIOD: 40000
+  CHECKPOINT_PERIOD: 90000
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 0
   BASE_LR: 0.0001
@@ -56,6 +56,6 @@ DATASETS:
   # ("uda_syn_real_human_cycle_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)
 TEST:
-  EVAL_PERIOD: 5000
-OUTPUT_DIR: "./output_vlm/cs_from_dinov2"
+  EVAL_PERIOD: 10000
+OUTPUT_DIR: "./output_vlm/debug"
 SAVE_INSTANCE_VISUALIZATION: True
