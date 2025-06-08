@@ -4,7 +4,8 @@ from typing import Tuple
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+import os
+import matplotlib.pyplot as plt
 import numpy as np
 
 from detectron2.config import configurable
@@ -18,9 +19,9 @@ from detectron2.utils.memory import retry_if_cuda_oom
 from detectron2.structures import BitMasks
 from detectron2.layers import batched_nms
 import math
-
 from .modeling.criterion import SetCriterion
 from .modeling.matcher import HungarianMatcher
+from sklearn.decomposition import PCA
 
 
 @META_ARCH_REGISTRY.register()
@@ -174,6 +175,102 @@ class MaskFormer(nn.Module):
     def device(self):
         return self.pixel_mean.device
 
+    def visualize_preprocess(self, images):
+        if not isinstance(images, ImageList):
+            print("Please pass the original 'images' object to visualize.")
+            return
+        # Denormalize
+        img_np = images.tensor[0].detach().cpu().numpy()
+        mean_np = self.pixel_mean.detach().cpu().numpy().squeeze()
+        std_np = self.pixel_std.detach().cpu().numpy().squeeze()
+        img_np = (img_np * std_np[:, None, None]) + mean_np[:, None, None]
+        img_np = np.clip(img_np, 0, 255).astype(np.uint8).transpose(1, 2, 0)
+        return img_np
+
+    def visualize_features_with_pca(self, features: torch.Tensor, save_dir, img_id, n_components=3):
+        """
+        Args:
+            features: 输入特征图，形状 (B, C, H, W)
+            n_components: PCA降维后的维度通常为3 对应RGB
+        Returns:
+            pca_heatmap: 形状 (H, W, 3)，范围 [0,1]
+        """
+        keys = list(features.keys())
+        for k, feat in features.items():
+            # 取第 1 个样本，shape = (C, H, W)
+            features_k = feat[0]  
+            # 转到 (H, W, C) numpy
+            features_np = features_k.permute(1, 2, 0).cpu().numpy()
+            H, W, C = features_np.shape
+            # 展平并标准化
+            flattened = features_np.reshape(-1, C)
+            flattened = (flattened - flattened.mean(axis=0)) / (flattened.std(axis=0) + 1e-6)
+            # PCA 降到 n_components
+            pca = PCA(n_components=n_components)
+            pca_result = pca.fit_transform(flattened)      # (H*W, n_components)
+            pca_map = pca_result.reshape(H, W, n_components)
+
+            # 归一化到 [0,1]
+            pca_map -= pca_map.min()
+            pca_map /= (pca_map.max() + 1e-6)
+
+            # 如果 n_components==3，就当作 RGB 图；否则用第一个分量的 Jet 颜色映射
+            if n_components == 3:
+                heatmap_img = pca_map
+
+            # 新建 figure
+            fig, ax = plt.subplots(figsize=(6 * W / H, 6))
+            ax.imshow(heatmap_img, interpolation='nearest')
+            ax.set_title(f"PCA heatmap — feature {k}")
+            ax.axis('off')
+
+            # 带 key 的文件名，避免覆盖
+            save_name = f"{img_id[:-4]}_{k}_pca.png"
+            save_path = os.path.join(save_dir, save_name)
+            fig.savefig(save_path, bbox_inches='tight', dpi=100)
+            plt.close(fig)
+
+    def visualize_and_save_features_on_images(self, features, img_np, save_dir, img_id):
+        """
+        Visualize and save all feature maps overlaid on a selected image.
+        The original image is denormalized using inside pixel_mean/std buffers.
+        """
+
+        for k, feat in features.items():
+            # 1) 如果你真的需要保存原图，建议把 key 也加到文件名里
+            fig, ax = plt.subplots()
+            ax.imshow(img_np)
+            ax.axis('off')
+            fig.savefig(os.path.join(save_dir, f"{img_id[:-4]}_{k}_orig.png"),
+                        bbox_inches='tight')
+            plt.close(fig)
+
+            # 2) 计算 channel 平均后的热力图
+            #    feat: Tensor of shape [batch, C, H, W]
+            heatmap = feat[0].mean(dim=0, keepdim=True)  # [1, H, W]
+
+            # 3) 上采样到原图大小（比如 img_np.shape[:2] = (H0, W0)）
+            H0, W0 = img_np.shape[:2]
+            heatmap_up = F.interpolate(
+                heatmap.unsqueeze(0),                # -> [1,1,H,W] -> [1,1,H0,W0]
+                size=(H0, W0),
+                mode='bilinear',
+                align_corners=False
+            )[0, 0]
+
+            # 4) 单独开一个 figure，用 “nearest” 插值看清每个像素块
+            fig, ax = plt.subplots(figsize=(6, 6 * H0 / W0))
+            ax.imshow(heatmap_up.detach().cpu().numpy(),
+                    interpolation='nearest',
+                    cmap='jet')
+            ax.set_title(f"Feature {k} (upsampled)")
+            ax.axis('off')
+            fig.savefig(os.path.join(save_dir, f"{img_id[:-4]}_{k}_mean.png"),
+                        dpi=100,
+                        bbox_inches='tight')
+            plt.close(fig)
+
+
     def forward(self, batched_inputs, target=False):
         """
         Args:
@@ -203,9 +300,6 @@ class MaskFormer(nn.Module):
         if 'source' in batched_inputs[0]:
             if target:
                 images = [x['target']["image"].to(self.device) for x in batched_inputs]
-                # # remove ego car logo
-                # for img in images:
-                #     img[:, 810:, :] = 0
             else:
                 images = [x['source']["image"].to(self.device) for x in batched_inputs]
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
@@ -284,8 +378,18 @@ class MaskFormer(nn.Module):
             images = ImageList.from_tensors(images, self.size_divisibility)
 
             features = self.backbone(images.tensor)
+            # visualize and save features
+            ###
+            if 0:
+                image_ids = [x["image_id"] for x in batched_inputs]
+                save_dir = "./backbone_feature_vit_dinov2_one_image/"
+                # Create the directory if it doesn't exist
+                os.makedirs(save_dir, exist_ok=True)
+                img_id = image_ids[0]
+                img_np = self.visualize_preprocess(images)
+                self.visualize_and_save_features_on_images(features, img_np, save_dir, img_id)
+                self.visualize_features_with_pca(features, save_dir, img_id)
             outputs = self.sem_seg_head(features)
-
             if self.training:
                 # mask classification target
                 if "instances" in batched_inputs[0]:
@@ -350,6 +454,7 @@ class MaskFormer(nn.Module):
 
                 self.local_count += 1
                 return processed_results
+
 
     def prepare_targets(self, targets, images):
         h_pad, w_pad = images.tensor.shape[-2:]

@@ -47,7 +47,7 @@ from utils import *
 
 # constants
 
-EVAL=True
+EVAL = False
 VISUAL = True
 ONLY_VAL = False
 
@@ -61,9 +61,11 @@ def get_parser():
     parser = argparse.ArgumentParser(description="Detectron2 demo for builtin configs")
     parser.add_argument(
         "--config-file",
-        # default="/home/yguo/Documents/other/detectron2/configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
+        # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinoV2.yaml",
+        default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_sam.yaml",
+        # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_large_bs16_50ep.yaml",
         # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
-        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
+        # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -73,17 +75,18 @@ def get_parser():
         "--input",
         nargs="+",
         # default=['/home/yguo/Documents/other/detectron2/demo/b.jpg'],
+        # default=['/home/yguo/Documents/other/segment-anything/image_1024_1024.png'],
         # default=['/home/yguo/Documents/other/UDA4Inst/debug_cindy'],
-        # default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
+        default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
         # default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
-        default=['datasets/kitti360/2013_05_28_drive_val_frames_image_all.txt'],
+        # default=['datasets/kitti360/2013_05_28_drive_val_frames_image_all.txt'],
         
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/urbansyn-kitti/only_source/',
+        default='visual_feature/sam_freeze_error_map/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -96,11 +99,11 @@ def get_parser():
     parser.add_argument(
         "--opts",
         help="Modify config options using the command-line 'KEY VALUE' pairs",
-        # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_random_small_fix_20kbs3/model_best.pth'],
-        # default=['MODEL.WEIGHTS','./output/smartmix/urbansyn_only_source_range_5_10/model_final.pth'],
-        # default=['MODEL.WEIGHTS','./output/category/synscapes_full/model_final.pth'],
-        # default=['MODEL.WEIGHTS','./output/category/urbansyn_full/model_final.pth'],
-        default=['MODEL.WEIGHTS','./output/a_kitti_swinL/urbansyn_sourceponly_kitti_40k/model_final.pth'],
+        # default=['MODEL.WEIGHTS','./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl'],
+        # default=['MODEL.WEIGHTS','./output_vlm/cs_freeze_true/model_0039999.pth'],
+        default=['MODEL.WEIGHTS','./output_vlm/cs_freeze_90k_sam_vit_base/model_0089999.pth'],
+        # default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output/instan_seg/mask2former_cs2cs/model_final.pth'],
+        # default=['MODEL.WEIGHTS','/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth'],
         
         
         nargs=argparse.REMAINDER,
@@ -118,12 +121,15 @@ def process_one(path, demo, _metadata, result_save_folder, visul_save_folder, ot
     
     # print('path of img is : ', path)
     img = read_image(path, format="BGR")
+    
     out_filename = os.path.join(visul_save_folder, basename+'.png')
-    predictions, visualized_output, visualizer = demo.run_on_image_for_instance(img)
+    predictions, visualized_output, visualizer = demo.run_on_image_for_instance(img, image_id=basename)
 
     cpu_device = torch.device("cpu")
     instances = predictions['instances'].to(cpu_device)
     instances = instances[instances.scores.cpu() > 0.85]
+    # instances = instances[instances.scores.cpu() > 0.3]
+
     num_instances = len(instances)
     print('num_instances:', num_instances)
 
@@ -161,21 +167,29 @@ if __name__ == "__main__":
             if os.path.isdir(args_input[0]):
                 inputs = sorted(Path(args_input[0]).glob('*/*.png'))
             elif os.path.isfile(args_input[0]):
-                with open(args_input[0], 'r') as file:
-                    lines = file.readlines()
-                inputs = [line.strip() for line in lines]
+                if args_input[0].endswith('.txt'):
+                    with open(args_input[0], 'r') as file:
+                        lines = file.readlines()
+                    inputs = [line.strip() for line in lines]
+                elif args_input[0].endswith('.jpg') or args_input[0].endswith('.png'):
+                    inputs = [args_input[0]]
+                else:
+                    raise ValueError("Unsupported file type. Please provide a valid directory or text file.")
 
         # process_all(inputs, demo, result_save_folder, visul_save_folder, other_map_save_folder)
         ''' multi-process '''
         mp.set_start_method("spawn", force=True)
+        # mp.set_start_method("fork", force=True)
         _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
         paramers = []
-        dataset_name = 'kitti360'
+        dataset_name = 'cityscapes'
         for i in range(len(inputs)):
             paramers.append((inputs[i], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name))
         # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
         pool = mp.Pool(processes=2)
         pool.starmap(process_one, paramers)
+        # debug
+        # process_one(inputs[0], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name)
     
     if EVAL:
         if 0:

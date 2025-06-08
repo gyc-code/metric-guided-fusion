@@ -21,7 +21,7 @@ MODEL:
   MASK_FORMER:
     NUM_OBJECT_QUERIES: 200
 SOLVER:
-  IMS_PER_BATCH: 3
+  IMS_PER_BATCH: 1
   CHECKPOINT_PERIOD: 70000
   WARMUP_FACTOR: 0.5
   WARMUP_ITERS: 1500
@@ -30,15 +30,15 @@ SOLVER:
 
 
 INPUT:
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 10)]"] #(5, 21), for (5, 10) urbansyn, (10, 25)for synthia synscapes
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 20)]"] #(5, 21), for (5, 10) urbansyn, (10, 25)for synthia synscapes
   MIN_SIZE_TRAIN_SAMPLING: "choice"
   MIN_SIZE_TEST: 1024
-  MAX_SIZE_TRAIN: 4096 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
+  MAX_SIZE_TRAIN: 2048 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096 
   MAX_SIZE_TEST: 2048
   CROP:
     ENABLED: True
     TYPE: "absolute"
-    SIZE:  (512, 1024) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
+    SIZE:  (512, 512) #  (512, 1024) for urbansyn and (1024, 1024) for synthia synscapes
 
 DATASETS:
   TRAIN: ('cityscapes_fine_instance_seg_train',) 

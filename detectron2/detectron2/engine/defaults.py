@@ -284,6 +284,11 @@ class DefaultPredictor:
         if len(cfg.DATASETS.TEST):
             self.metadata = MetadataCatalog.get(cfg.DATASETS.TEST[0])
 
+        # # 只加载 backbone.model 里的权重
+        # if "dinov2_vit" in cfg.MODEL.WEIGHTS:
+        #     backbone_ckpt = torch.load(self.cfg.MODEL.WEIGHTS, map_location="cpu")
+        #     self.model.backbone.model.load_state_dict(backbone_ckpt, strict=False)
+        # else:
         checkpointer = DetectionCheckpointer(self.model)
         checkpointer.load(cfg.MODEL.WEIGHTS)
 
@@ -294,7 +299,7 @@ class DefaultPredictor:
         self.input_format = cfg.INPUT.FORMAT
         assert self.input_format in ["RGB", "BGR"], self.input_format
 
-    def __call__(self, original_image):
+    def __call__(self, original_image, image_id=None):
         """
         Args:
             original_image (np.ndarray): an image of shape (H, W, C) (in BGR order).
@@ -314,7 +319,7 @@ class DefaultPredictor:
             image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
             image.to(self.cfg.MODEL.DEVICE)
 
-            inputs = {"image": image, "height": height, "width": width}
+            inputs = {"image": image, "height": height, "width": width, "image_id": image_id}
 
             predictions = self.model([inputs])[0]
             return predictions

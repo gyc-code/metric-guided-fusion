@@ -106,6 +106,9 @@ def add_maskformer2_config(cfg):
     cfg.MODEL.DINOV2.BLOCK_CHUNKS = 0
     cfg.MODEL.DINOV2.FREEZE_AT = None
 
+    # SAM backbone
+
+
     # NOTE: maskformer2 extra configs
     # transformer module
     cfg.MODEL.MASK_FORMER.TRANSFORMER_DECODER_NAME = "MultiScaleMaskedTransformerDecoder"

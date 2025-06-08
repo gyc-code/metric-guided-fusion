@@ -66,7 +66,7 @@ class VisualizationDemo(object):
 
         return predictions, vis_output
 
-    def run_on_image_for_instance(self, image):
+    def run_on_image_for_instance(self, image, image_id=None):
         """
         Args:
             image (np.ndarray): an image of shape (H, W, C) (in BGR order).
@@ -77,7 +77,7 @@ class VisualizationDemo(object):
             vis_output (VisImage): the visualized image output.
         """
         vis_output = None
-        predictions = self.predictor(image)
+        predictions = self.predictor(image, image_id=image_id)
 
         # Convert image from OpenCV BGR format to Matplotlib RGB format.
         image = image[:, :, ::-1]

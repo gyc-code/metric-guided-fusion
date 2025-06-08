@@ -852,3 +852,5 @@ def correct_label_by_CLIP(instances, input_image, imagepath=None, map_save_folde
     instances = instances[keep]
     #TODO remove small instance with keep mask
     return instances
+
+

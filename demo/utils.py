@@ -103,9 +103,9 @@ def get_error_map(gt_color, visual_pred_color):
         mask_white = (~gt_has_data) & (~pred_has_data)
 
         # 分配颜色（OpenCV使用BGR格式）
-        # difference_image[mask_orange] = [0, 165, 255]   # 橙色
+        difference_image[mask_orange] = [0, 165, 255]   # 橙色
         difference_image[mask_gray] = [128, 128, 128]   # 灰色
-        difference_image[mask_blue] = [255, 0, 0]       # 蓝色
+        difference_image[mask_blue] = [33, 33, 255]       # 紅色
         difference_image[mask_green] = [0, 255, 0]      # 绿色
         difference_image[mask_white] = [255, 255, 255]  # 白色
         
@@ -126,7 +126,7 @@ def add_legend(image):
     legend_info = [
         ([0, 165, 255], 'GT exit, No Pred'),      # 橙色
         ([128, 128, 128], 'No GT, Pred exit'),    # 灰色
-        ([255, 0, 0], 'class error'),            # 蓝色
+        ([33, 33, 255], 'class error'),            # 紅色
         ([0, 255, 0], 'correct'),            # 绿色
     ]
 
@@ -249,7 +249,7 @@ def cat_pred_gt(visual_pred_color, mask_vis_output, file_name, dataset_name='cit
     black_pixels = np.all(gt_img == [0, 0, 0], axis=-1)
     gt_img[black_pixels] = [255, 255, 255]
 
-    error_map = get_error_map_red_green(gt_img.astype("uint8"), visual_pred_color)
+    error_map = get_error_map(gt_img.astype("uint8"), visual_pred_color)
 
     h,w,c = rgb_img.shape
     black_bar_shape = (10, w, c)

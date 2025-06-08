@@ -9,9 +9,11 @@ output_vlm/
 # *.yaml
 *.sh
 # datasets/
+pretrain/
 datasets_bp/
 tmp
 *sh
+Vit-adapter_test.py
 *.png
 !/template/*.png
 

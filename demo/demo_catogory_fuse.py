@@ -47,7 +47,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 # constants
 
-EVAL = True
+EVAL = False
 VISUAL = True
 ONLY_VAL = False
 
@@ -60,7 +60,9 @@ def get_parser():
     parser.add_argument(
         "--config-file",
         # default="/home/yguo/Documents/other/detectron2/configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
-        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
+        # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
+        default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
+
         metavar="FILE",
         help="path to config file",
     )
@@ -70,13 +72,14 @@ def get_parser():
         "--input",
         nargs="+",
         # default=['datasets/synscapes/category_img_synscapes_instance_val.txt'],
-        default=['datasets/kitti360/2013_05_28_drive_val_frames_image_all.txt'],
+        # default=['datasets/kitti360/2013_05_28_drive_val_frames_image_all.txt'],
+        default=['/datafast/120-1/Datasets/segmentation/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/val'],
         help="A list of space separated input images; "
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
         "--output",
-        default='visual_instance/urbansyn-kitti/uda4inst/',
+        default='visual_instance/urbansyn-cs/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0_9_t2s_s2t-motor-augu/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -91,9 +94,9 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl'],
         # default=['MODEL.WEIGHTS','./output/uda_synscapes_clean2_1024_bs3from_coco_huamn_cycle_t2s_s2t_motor_augum/model_best.pth ./output/uda_synscapes_clean2_1024_bs3from_coco_vehicle_t2s_s2t_train_augum/model_best.pth'],
-        # default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
+        default=['MODEL.WEIGHTS','./output/instan_seg/uda_urabn_human_cycle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-motor-augu/model_best.pth ./output/instan_seg/uda_urabn_vehicle_1024_from_pre_coco_bs3_p0.9_t2s_s2t-train-source-augu/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/uda_synthia_human_cycle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-motor-augu/model_best.pth ./output/uda_synthia_vehicle_1024_from_pre_coco_bs3_p0.9_0.25t2s_0.75s2t-bus-augu/model_best.pth'],
-        default=['MODEL.WEIGHTS','./output/a_category_4UDA_swinL/uda_kitti_urbansyn_human_cycle_large1500_instance_or_patch_LAB/model_best.pth ./output/a_category_4UDA_swinL/uda_kitti_urbansyn_vehicle_large1500_instance_or_patch_LAB/model_best.pth'],
+        # default=['MODEL.WEIGHTS','./output/a_category_4UDA_swinL/uda_kitti_urbansyn_human_cycle_large1500_instance_or_patch_LAB/model_best.pth ./output/a_category_4UDA_swinL/uda_kitti_urbansyn_vehicle_large1500_instance_or_patch_LAB/model_best.pth'],
         # default=['MODEL.WEIGHTS','./output/category/urbansyn_human_cycle/model_final.pth ./output/category/urbansyn_vehicle/model_final.pth'],
         # default=['MODEL.WEIGHTS','./output/category/synthia_human_cycle/model_final.pth ./output/category/synthia_vehicle/model_final.pth'],
         
@@ -184,12 +187,13 @@ if __name__ == "__main__":
         mp.set_start_method("spawn", force=True)
         _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
         paramers = []
-        dataset_name = 'kitti360'
+        dataset_name = 'cityscapes'
         for i in range(len(inputs)):
             paramers.append((inputs[i], demo_human_cycle, demo_vehicle, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, target, dataset_name))
         # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
         pool = mp.Pool(processes=2)
         pool.starmap(process_one, paramers)
+
     
     if EVAL:
         if 0:
