@@ -9,6 +9,8 @@ from .backbone import (
     ResNet,
     ResNetBlockBase,
     build_backbone,
+    build_aux_backbone,
+    build_bench_backbone,
     build_resnet_backbone,
     make_stage,
     ViT,

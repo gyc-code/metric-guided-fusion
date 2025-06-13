@@ -107,9 +107,8 @@ class DetectionCheckpointer(Checkpointer):
                         # 替换前缀
                         new_key = key.replace("image_encoder.", "backbone.", 1)  # from "image_encoder." to "backbone."
                         new_weights[new_key] = loaded[key]
-
-
                 loaded = new_weights
+                
                 if 0:
                     # cindy, origial model is for 1024*1024, new size is 512*512 ,interpolate the new weights
                     # 先取出旧的 pos_embed
@@ -127,6 +126,16 @@ class DetectionCheckpointer(Checkpointer):
                     new_pe = new_pe.permute(0, 2, 3, 1)  # [1, 32, 32, 768]
                     # 4. 替换权重字典中的 pos_embed
                     loaded["backbone.pos_embed"] = new_pe
+
+            elif filename.endswith(".pth") and "_vitb_fb_512_1024/model_final" in filename: 
+                # new_weights = {}
+                loaded = loaded['model']
+                # for key in loaded.keys():
+                #     if key.startswith("model."):
+                #         # 替换前缀
+                #         new_key = key.replace("image_encoder.", "backbone.", 1)  # from "image_encoder." to "backbone."
+                #         new_weights[new_key] = loaded[key]
+                # loaded = new_weights
 
         if "model" not in loaded:
             loaded = {"model": loaded}

@@ -105,7 +105,7 @@ def get_parser():
         # default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output/instan_seg/mask2former_cs2cs/model_final.pth'],
         # default=['MODEL.WEIGHTS','/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth'],
         
-        
+
         nargs=argparse.REMAINDER,
     )
     return parser

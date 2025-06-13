@@ -45,6 +45,17 @@ class DinoV2BaseBackbone(Backbone):
             "res4": 512,
             "res5": 1024,
         }
+
+        # -------------------------------------------------
+        if 0:
+            model_weight_file = "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
+            if model_weight_file:
+                checkpointer = DetectionCheckpointer(self, save_dir=None)
+                checkpointer.load(model_weight_file)
+            print('loaded dinov2 transformer weights from {}'.format(model_weight_file))
+        # -------------------------------------------------
+
+
     # def extract_hook(self):
     #     def hook(module, input, output):
     #         self.qkv_out = output

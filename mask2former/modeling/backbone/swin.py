@@ -16,6 +16,7 @@ import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 from detectron2.modeling import BACKBONE_REGISTRY, Backbone, ShapeSpec
+from detectron2.checkpoint import DetectionCheckpointer
 
 
 class Mlp(nn.Module):
@@ -740,6 +741,15 @@ class D2SwinTransformer(SwinTransformer, Backbone):
             "res5": self.num_features[3],
         }
 
+        # -------------------------------------------------
+        if 1:
+            model_weight_file = cfg.MODEL.WEIGHTS_BENCH
+            if model_weight_file:
+                checkpointer = DetectionCheckpointer(self, save_dir=None)
+                checkpointer.load(model_weight_file)
+            print('loaded swin transformer weights from {}'.format(model_weight_file))
+        # -------------------------------------------------
+
     def forward(self, x):
         """
         Args:
@@ -768,3 +778,7 @@ class D2SwinTransformer(SwinTransformer, Backbone):
     @property
     def size_divisibility(self):
         return 32
+        
+    def freeze_backbone(self):
+        for param in self.parameters():
+            param.requires_grad = False

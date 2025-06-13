@@ -31,3 +31,33 @@ def build_backbone(cfg, input_shape=None):
     backbone = BACKBONE_REGISTRY.get(backbone_name)(cfg, input_shape)
     assert isinstance(backbone, Backbone)
     return backbone
+
+def build_aux_backbone(cfg, input_shape=None):
+    """
+    Build a backbone from `cfg.MODEL.BACKBONE_AUX.NAME`.
+
+    Returns:
+        an instance of :class:`Backbone`
+    """
+    if input_shape is None:
+        input_shape = ShapeSpec(channels=len(cfg.MODEL.PIXEL_MEAN))
+
+    backbone_name = cfg.MODEL.BACKBONE_AUX.NAME
+    backbone = BACKBONE_REGISTRY.get(backbone_name)(cfg, input_shape)
+    assert isinstance(backbone, Backbone)
+    return backbone
+
+def build_bench_backbone(cfg, input_shape=None):
+    """
+    Build a backbone from `cfg.MODEL.BACKBONE_BENCH.NAME`.
+
+    Returns:
+        an instance of :class:`Backbone`
+    """
+    if input_shape is None:
+        input_shape = ShapeSpec(channels=len(cfg.MODEL.PIXEL_MEAN))
+
+    backbone_name = cfg.MODEL.BACKBONE_BENCH.NAME
+    backbone = BACKBONE_REGISTRY.get(backbone_name)(cfg, input_shape)
+    assert isinstance(backbone, Backbone)
+    return backbone

@@ -136,6 +136,10 @@ _C.MODEL.BACKBONE.NAME = "build_resnet_backbone"
 # stages are each group of residual blocks.
 _C.MODEL.BACKBONE.FREEZE_AT = 2
 
+# # add by cindy
+# _C.MODEL.BACKBONE_AUX = CN()
+# _C.MODEL.BACKBONE_AUX.NAME = "build_resnet_backbone"
+# _C.MODEL.BACKBONE_AUX.FREEZE_AT = 2
 
 # ---------------------------------------------------------------------------- #
 # FPN options
