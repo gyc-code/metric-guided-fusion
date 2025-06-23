@@ -8,7 +8,7 @@ MODEL:
   BACKBONE_BENCH:
     NAME: "D2SwinTransformer"
   MASK_FORMER:
-    FROZE_BACKBONE: True
+    FROZE_BACKBONE: False
     FROZE_AUX_BACKBONE: True
     FROZE_BENCH_BACKBONE: True
   SWIN: # fb version
@@ -36,7 +36,8 @@ MODEL:
   WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_h_4b8939.pth"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_l_0b3195.pth"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
-  WEIGHTS_BENCH: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
+  # WEIGHTS_BENCH: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
+  WEIGHTS_BENCH: ""
   # "pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   # WEIGHTS_BENCH: "./pretrain/swin_large_patch4_window12_384_22k.pkl"
 
@@ -67,7 +68,7 @@ DATASETS:
   #("urbansyn_vehicle_instance_seg_train",)
   # ("uda_syn_real_vehicle_instance_seg_train",)
   # ("uda_syn_real_human_cycle_instance_seg_train",)
-  # #("uda_syn_real_instance_seg_train",) 
+  # #("uda_syn_real_instance_seg_train",)
   #("urbansyn_vehicle_instance_seg_train",)
   # ("uda_syn_real_human_cycle_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)

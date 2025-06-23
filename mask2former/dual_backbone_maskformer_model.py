@@ -23,9 +23,10 @@ from .modeling.criterion import SetCriterion
 from .modeling.matcher import HungarianMatcher
 from sklearn.decomposition import PCA
 from .vlm_fusion.create_fusion_model import SemanticEdgeFusion
-from .vlm_fusion.create_fusion_model_1 import MultiStageFusion
+from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace
+from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 
-DEBUG = True
+DEBUG = True  # Set to True to enable debug features like feature visualization
 
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
@@ -255,7 +256,7 @@ class DualBackboneMaskFormer(nn.Module):
         return {
             "backbone": backbone,
             "backbone_aux": backbone_aux, # cindy add auxiliary backbone
-            # "backbone_bench": backbone_bench, # cindy add bench backbone
+            "backbone_bench": backbone_bench, # cindy add bench backbone
             "sem_seg_head": sem_seg_head,
             "criterion": criterion,
             "num_queries": cfg.MODEL.MASK_FORMER.NUM_OBJECT_QUERIES,
@@ -406,7 +407,7 @@ class DualBackboneMaskFormer(nn.Module):
             features_aux = self.backbone_aux(images.tensor)  # cindy add auxiliary backbone
             features_aux = {k: v.half() for k, v in features_aux.items()}
 
-            if DEBUG:
+            if 0:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
         
             # cindy add, merge features
@@ -418,8 +419,24 @@ class DualBackboneMaskFormer(nn.Module):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             # model  = SemanticEdgeFusion().to(device)
             # features = model(features_main, features_aux)
-            fusion_model = MultiStageFusion().cuda().half()
-            features = fusion_model(features_main, features_aux)
+
+            # test 1
+            # if self.training:
+            #     fusion_model = MultiStageFusion().cuda().half()
+            # else:
+            #     fusion_model = MultiStageFusion().cuda()
+            # features = fusion_model(features_main, features_aux)
+
+
+            # test 2
+            # features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
+
+            ###### test 3
+            if self.training:
+                head = FeatureFusionHead([128,256,512,1024], 256).to(device).half()
+            else:
+                head = FeatureFusionHead([128,256,512,1024], 256).to(device)
+            features = head(features_main, features_aux)
 
             # chs = [128,256,512,1024]
             # model = ImprovedFusionWindow(chs, chs, out_channel=256,
@@ -430,7 +447,7 @@ class DualBackboneMaskFormer(nn.Module):
             ###
             if 0:
                 image_ids = [x["image_id"] for x in batched_inputs]
-                save_dir = "./backbone_feature_fuse_sam_edge/"
+                save_dir = "./backbone_feature_fuse_model_623-1/"
                 # Create the directory if it doesn't exist
                 os.makedirs(save_dir, exist_ok=True)
                 img_id = image_ids[0]

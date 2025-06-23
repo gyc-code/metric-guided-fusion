@@ -130,54 +130,39 @@ def get_sobel_filters(channel):
     for p in conv_y.parameters(): p.requires_grad = False
     return conv_x, conv_y
 
-
 class ImprovedFusion(nn.Module):
-    """
-    进一步增强版融合模块：
-    1) SAM 投影
-    2) Depthwise 3x3 捕捉边缘
-    3) Sobel 边缘图门控加强空间细节
-    4) 拼接 + 1x1 Conv 通道融合
-    5) 可学习残差缩放 alpha
-    """
     def __init__(self, C_dino, C_sam=256):
         super().__init__()
-        # 1) SAM 特征投影
         self.proj_s = nn.Conv2d(C_sam, C_dino, kernel_size=1, bias=False)
-        # 2) Depthwise 3x3
         self.dwconv = conv3x3(C_dino, C_dino, groups=C_dino)
-        # 3) Sobel filters
         self.sobel_x, self.sobel_y = get_sobel_filters(C_dino)
-        # 4) 门控系数 beta
-        self.beta = nn.Parameter(torch.tensor(3.0))
-        # 5) 融合 Conv
+        self.beta = nn.Parameter(torch.tensor(1.0))  # 稳定起见从1.0开始
         self.fuse_conv = nn.Conv2d(2 * C_dino, C_dino, kernel_size=1, bias=False)
-        # 6) 激活 & 缩放 alpha
         self.act = nn.ReLU(inplace=True)
-        # self.alpha = nn.Parameter(torch.ones(1))
         self.alpha = nn.Parameter(torch.tensor(1.0))
 
-    def forward(self, F_dino: torch.Tensor, F_sam: torch.Tensor) -> torch.Tensor:
-        # 对齐
+    def forward(self, F_dino, F_sam):
+        # 特征对齐
         F_s = F.interpolate(F_sam, size=F_dino.shape[-2:], mode='bilinear', align_corners=False)
-        # SAM 投影
+        if F_s.dtype != F_dino.dtype:
+            F_s = F_s.type_as(F_dino)
+        # 投影到同一维度
         F_s = self.proj_s(F_s)
-        # Depthwise 卷积增强
+        # 深度卷积
         F_s = self.dwconv(F_s)
-        # Sobel 边缘图
+        # Sobel边缘提取
         edge_x = self.sobel_x(F_s)
         edge_y = self.sobel_y(F_s)
         edge = torch.sqrt(edge_x**2 + edge_y**2 + 1e-6)
-        # 门控：在 F_s 基础上加强边缘
-        F_s = F_s * (1 + self.beta * edge)
-        F_s = self.beta * edge
-        # 拼接融合
-        # F_cat = torch.cat([F_dino, F_s], dim=1)
-        # F_fuse = self.act(self.fuse_conv(F_cat))
-        # 残差叠加
-        # return F_dino + self.alpha * F_s
-        return self.alpha * F_s
+        # 边缘增强
+        F_s_enhanced = F_s * (1 + self.beta * edge)
 
+        # 拼接并融合
+        F_cat = torch.cat([F_dino, F_s_enhanced], dim=1)
+        F_fuse = self.act(self.fuse_conv(F_cat))
+
+        # 输出融合后的特征
+        return F_dino + self.alpha * F_fuse
 
 
 class MultiStageFusion(nn.Module):
@@ -200,78 +185,81 @@ class MultiStageFusion(nn.Module):
         }
 
 
-# Predefined Sobel kernels for edge detection
-# _sobel_x = torch.tensor([
-#     [1.0, 0.0, -1.0],
-#     [2.0, 0.0, -2.0],
-#     [1.0, 0.0, -1.0]
-# ], dtype=torch.float32)
-# _sobel_y = torch.tensor([
-#     [1.0, 2.0, 1.0],
-#     [0.0, 0.0, 0.0],
-#     [-1.0, -2.0, -1.0]
-# ], dtype=torch.float32)
+def align_channels_and_spatial(src: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
+    """
+    Align `src` tensor to the channel and spatial dimensions of `tgt`.
+
+    Uses evenly spaced channel sampling when src has more channels, and fills with
+    the mean feature when src has fewer channels.
+
+    Args:
+        src: Tensor of shape (N, C_src, h, w)
+        tgt: Tensor of shape (N, C_tgt, H, W)
+    Returns:
+        Tensor of shape (N, C_tgt, H, W)
+    """
+    # 1. Spatial resize
+    N, C_tgt, H, W = tgt.shape
+    src_resized = F.interpolate(src, size=(H, W), mode='bilinear', align_corners=False)
+    C_src = src_resized.shape[1]
+
+    # 2. Channel align
+    if C_src >= C_tgt:
+        # Sample channels evenly across src_resized using floor of uniform steps
+        step = C_src / C_tgt
+        # indices = floor(arange(0, C_tgt) * step)
+        indices = (torch.arange(C_tgt, device=src_resized.device) * step).floor().long()
+        return src_resized[:, indices, :, :]
+    else:
+        # Compute mean across channels as filler when C_src < C_tgt
+        mean_feat = src_resized.mean(dim=1, keepdim=True)
+        pad = mean_feat.repeat(1, C_tgt - C_src, 1, 1)
+        return torch.cat([src_resized, pad], dim=1)
 
 
-# def fuse_features_with_sobel(dino_feats: dict,
-#                               sam_feats: dict,
-#                               alpha: float = 1.0,
-#                               beta: float = 3.0) -> dict:
-#     """
-#     Inference-only feature fusion using SAM edge contours, without any learnable parameters.
+def align_and_replace(dino_feats: dict, sam_feats: dict,
+                      mapping: dict = None) -> dict:
+    """
+    Replace selected keys in dino_feats with aligned sam_feats.
 
-#     Args:
-#         dino_feats: dict of DINOv2 features, keys 'res2'...'res5', shapes [B, C_d, H, W]
-#         sam_feats : dict of SAM features, same keys, shapes [B, C_s, h, w]
-#         alpha     : weight for SAM branch in final sum
-#         beta      : strength of edge gating on SAM features
+    Args:
+        dino_feats: dict of feature maps, e.g. {'res2': Tensor, ...}
+        sam_feats : dict of feature maps, same keys
+        mapping   : dict mapping sam_keys -> dino_keys
+                    defaults to {'res2': 'res2', 'res3': 'res4'}
 
-#     Returns:
-#         fused_feats: dict with same keys and shapes as dino_feats
-#     """
-#     fused_feats = {}
-#     for lvl, F_d in dino_feats.items():
-#         # Upsample SAM to match DINO spatial resolution
-#         F_s = F.interpolate(
-#             sam_feats[lvl], size=F_d.shape[-2:], mode='bilinear', align_corners=False
-#         )
-#         B, C_s, H, W = F_s.shape
-#         device = F_s.device
+    Returns:
+        Updated copy of dino_feats with replaced tensors.
+    """
+    # Work on a shallow copy to avoid side-effects
+    out_feats = dino_feats.copy()
+    if mapping is None:
+        mapping = {'res2': 'res2', 'res3': 'res4'}
 
-#         # Prepare Sobel kernels on the fly, replicated for depthwise conv
-#         # Shape for depthwise: [C_s, 1, 3, 3]
-#         kx = _sobel_x.view(1,1,3,3).repeat(C_s,1,1,1).to(device).half()
-#         ky = _sobel_y.view(1,1,3,3).repeat(C_s,1,1,1).to(device).half()
+    for sam_key, dino_key in mapping.items():
+        src = sam_feats.get(sam_key)
+        tgt = out_feats.get(dino_key)
+        if src is None or tgt is None:
+            continue
+        out_feats[dino_key] = align_channels_and_spatial(src, tgt)
 
-#         # Compute edge maps per channel (depthwise conv)
-#         edge_x = F.conv2d(F_s, weight=kx, padding=1, groups=C_s).to(device).half()
-#         edge_y = F.conv2d(F_s, weight=ky, padding=1, groups=C_s).to(device).half()
-#         edge = torch.sqrt(edge_x**2 + edge_y**2 + 1e-6)
-
-#         # Edge gating: amplify SAM features at contour locations
-#         F_s_enh = F_s * (1.0 + beta * edge)
-
-#         # Final fusion: simple weighted sum, no concat/conv required
-#         fused_feats[lvl] = F_d + alpha * F_s_enh
-
-#     return fused_feats
-
+    return out_feats
 
 
 if __name__ == '__main__':
     device = 'cuda'
-    # dino_feats = {
-    #     'res2': torch.randn(1, 128, 256, 256, device=device).half(),
-    #     'res3': torch.randn(1, 256, 128, 128, device=device).half(),
-    #     'res4': torch.randn(1, 512, 64,  64, device=device).half(),
-    #     'res5': torch.randn(1,1024, 32,  32, device=device).half(),
-    # }
-    # sam_feats = {
-    #     'res2': torch.randn(1,256,64,64, device=device).half(),
-    #     'res3': torch.randn(1,256,64,64, device=device).half(),
-    #     'res4': torch.randn(1,256,64,64, device=device).half(),
-    #     'res5': torch.randn(1,256,64,64, device=device).half(),
-    # }
+    dino_feats = {
+        'res2': torch.randn(1, 128, 256, 256, device=device).half(),
+        'res3': torch.randn(1, 256, 128, 128, device=device).half(),
+        'res4': torch.randn(1, 512, 64,  64, device=device).half(),
+        'res5': torch.randn(1,1024, 32,  32, device=device).half(),
+    }
+    sam_feats = {
+        'res2': torch.randn(1,256,64,64, device=device).half(),
+        'res3': torch.randn(1,256,64,64, device=device).half(),
+        'res4': torch.randn(1,256,64,64, device=device).half(),
+        'res5': torch.randn(1,256,64,64, device=device).half(),
+    }
 
     # 加载：
     dino_feat = np.load('dino.npy', allow_pickle=True)
