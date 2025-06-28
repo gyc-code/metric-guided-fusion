@@ -294,9 +294,6 @@ class DualBackboneMaskFormer(nn.Module):
         img_np = np.clip(img_np, 0, 255).astype(np.uint8).transpose(1, 2, 0)
         return img_np
 
-
-
-
     def forward(self, batched_inputs, target=False):
         """
         Args:
@@ -403,9 +400,30 @@ class DualBackboneMaskFormer(nn.Module):
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
             images = ImageList.from_tensors(images, self.size_divisibility)
 
+            if 1: #### pad for sam
+                # 假设这里已经有 self.device、self.pixel_mean、self.pixel_std、self.size_divisibility
+                padded_images = []
+                for img in images:
+                    # img: Tensor[C, H, W], 这里 H=512, W=1024
+                    C, H, W = img.shape
+                    assert H == 512 and W == 1024, "输入必须是 3*512*1024"
+                    # 在高度维度上重复两遍
+                    img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
+                    padded_images.append(img_tiled)
+
+                # 构建 ImageList
+                pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
+
             features_main = self.backbone(images.tensor)
-            features_aux = self.backbone_aux(images.tensor)  # cindy add auxiliary backbone
-            features_aux = {k: v.half() for k, v in features_aux.items()}
+            features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
+            for k in features_main.keys():
+                feature_height = int(features_aux[k].shape[2] / 2)
+                features_aux[k] = features_aux[k][:, :, 0:feature_height, :]  # cindy add, align aux features with main features  
+
+            if self.training: 
+                features_aux = {k: v.half() for k, v in features_aux.items()}
+            else:
+                features_aux = {k: v for k, v in features_aux.items()}
 
             if 0:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
@@ -447,7 +465,7 @@ class DualBackboneMaskFormer(nn.Module):
             ###
             if 0:
                 image_ids = [x["image_id"] for x in batched_inputs]
-                save_dir = "./backbone_feature_fuse_model_623-1/"
+                save_dir = "./backbone_feature_fuse_model_628-1/"
                 # Create the directory if it doesn't exist
                 os.makedirs(save_dir, exist_ok=True)
                 img_id = image_ids[0]

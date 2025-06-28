@@ -105,6 +105,17 @@ def test():
     }
     sam_feats = {k: torch.randn(1,256,64,64, device=device).half() for k in dino_feats}
     head = FeatureFusionHead([128,256,512,1024], 256).to(device).half()
+
+
+    # dino_feats = {
+    #     'res2': torch.randn(1, 128, 256, 256, device=device),
+    #     'res3': torch.randn(1, 256, 128, 128, device=device),
+    #     'res4': torch.randn(1, 512,  64,  64, device=device),
+    #     'res5': torch.randn(1,1024,  32,  32, device=device),
+    # }
+    # sam_feats = {k: torch.randn(1,256,64,64, device=device) for k in dino_feats}
+    # head = FeatureFusionHead([128,256,512,1024], 256).to(device)
+
     out = head(dino_feats, sam_feats)
     for k,v in out.items():
         print(f"{k}: {v.shape}, dtype={v.dtype}")
