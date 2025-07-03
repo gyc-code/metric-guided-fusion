@@ -145,5 +145,7 @@ def add_maskformer2_dual_backbone_config(cfg):
     # Importance sampling parameter for PointRend point sampling during training. Parametr `beta` in
     # the original paper.
     cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO = 0.75
+    # for fuse, type should be no_fuse, channel_replace, fuse_head, alpha_fuse
+    cfg.FUSE_TYPE = "no_fuse"
 
 

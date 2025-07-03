@@ -44,8 +44,8 @@ MODEL:
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
 SOLVER:
-  IMS_PER_BATCH: 1
-  CHECKPOINT_PERIOD: 180000 #90000
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 180000
 TEST:
   EVAL_PERIOD: 10000
 
@@ -72,3 +72,5 @@ DATASETS:
   #("urbansyn_vehicle_instance_seg_train",)
   # ("uda_syn_real_human_cycle_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)
+
+FUSE_TYPE: "no_fuse" ###  type should be no_fuse, channel_replace, fuse_head, alpha_fuse, edge_fusion

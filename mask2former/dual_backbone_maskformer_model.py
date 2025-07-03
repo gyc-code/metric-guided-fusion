@@ -141,6 +141,7 @@ class DualBackboneMaskFormer(nn.Module):
         panoptic_on: bool,
         instance_on: bool,
         test_topk_per_image: int,
+        fuse_type: str,
     ):
         """
         Args:
@@ -195,6 +196,8 @@ class DualBackboneMaskFormer(nn.Module):
 
         if not self.semantic_on:
             assert self.sem_seg_postprocess_before_inference
+        ### fuse type
+        self.fuse_type = fuse_type
 
     @classmethod
     def from_config(cls, cfg):
@@ -276,6 +279,8 @@ class DualBackboneMaskFormer(nn.Module):
             "instance_on": cfg.MODEL.MASK_FORMER.TEST.INSTANCE_ON,
             "panoptic_on": cfg.MODEL.MASK_FORMER.TEST.PANOPTIC_ON,
             "test_topk_per_image": cfg.TEST.DETECTIONS_PER_IMAGE,
+            ##  fuse function
+            "fuse_type": cfg.FUSE_TYPE,
         }
 
     @property
@@ -399,73 +404,87 @@ class DualBackboneMaskFormer(nn.Module):
             images = [x["image"].to(self.device) for x in batched_inputs]
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
             images = ImageList.from_tensors(images, self.size_divisibility)
-
-            if 1: #### pad for sam
-                # 假设这里已经有 self.device、self.pixel_mean、self.pixel_std、self.size_divisibility
+            features_main = self.backbone(images.tensor)
+            # for k in features_main.keys():
+            #     print(f"feature_main[{k}].shape: {features_main[k].shape}") 
+            
+            if self.training:
+                #### pad for sam when input size is 512*1024
                 padded_images = []
                 for img in images:
                     # img: Tensor[C, H, W], 这里 H=512, W=1024
                     C, H, W = img.shape
-                    assert H == 512 and W == 1024, "输入必须是 3*512*1024"
+                    assert H == 512 and W == 1024, "for training, input size 3*512*1024"
                     # 在高度维度上重复两遍
                     img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
                     padded_images.append(img_tiled)
 
                 # 构建 ImageList
                 pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
+                features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
 
-            features_main = self.backbone(images.tensor)
-            features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
-            for k in features_main.keys():
-                feature_height = int(features_aux[k].shape[2] / 2)
-                features_aux[k] = features_aux[k][:, :, 0:feature_height, :]  # cindy add, align aux features with main features  
+                for k in features_aux.keys():
+                    feature_height = int(features_aux[k].shape[2] / 2)
+                    features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
 
-            if self.training: 
-                features_aux = {k: v.half() for k, v in features_aux.items()}
             else:
-                features_aux = {k: v for k, v in features_aux.items()}
+                #### crop image to be two parts for test, when input is 1024*2048
+                left_images = []
+                right_images = []
+                for img in images:
+                    # img: Tensor[C, H, W], 这里 H=1024, W=2048
+                    C, H, W = img.shape
+                    assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
+                    left_images.append(img[:, :, :1024])
+                    right_images.append(img[:, :, 1024:])
 
-            if 0:
+                # 构建 ImageList
+                left_images = ImageList.from_tensors(left_images, self.size_divisibility)
+                features_left = self.backbone_aux(left_images.tensor)  # cindy add auxiliary backbone
+                right_images = ImageList.from_tensors(right_images, self.size_divisibility)
+                features_right = self.backbone_aux(right_images.tensor)  # cindy add auxiliary backbone
+                features_aux = {}
+                for k in features_left.keys():
+                    # Concatenate left and right features along the channel dimension
+                    features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
+                    # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+
+            if 1:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
-        
-            # cindy add, merge features
-            # save for debug
-            # np.save("./dino.npy", features_main)
-            # np.save("./sam.npy", features_aux)
-            # np.save("./bench.npy", features_bench)
             
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            # model  = SemanticEdgeFusion().to(device)
-            # features = model(features_main, features_aux)
 
-            # test 1
-            # if self.training:
-            #     fusion_model = MultiStageFusion().cuda().half()
-            # else:
-            #     fusion_model = MultiStageFusion().cuda()
-            # features = fusion_model(features_main, features_aux)
-
-
-            # test 2
-            # features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
-
-            ###### test 3
-            if self.training:
-                head = FeatureFusionHead([128,256,512,1024], 256).to(device).half()
-            else:
-                head = FeatureFusionHead([128,256,512,1024], 256).to(device)
-            features = head(features_main, features_aux)
-
-            # chs = [128,256,512,1024]
-            # model = ImprovedFusionWindow(chs, chs, out_channel=256,
-            #                      num_heads=8, window_size=16).to(device)
-            # features = model(features_main, features_aux)
+            # type should be None, channel_replace, fuse_head, alpha_fuse
+            if self.fuse_type == "alpha_fuse":
+                # test 1   F_dino + self.alpha * F_fuse
+                if self.training:
+                    fusion_model = MultiStageFusion().cuda().half()
+                else:
+                    fusion_model = MultiStageFusion().cuda()
+                features = fusion_model(features_main, features_aux)
+            elif self.fuse_type == "channel_replace":
+                # test 2  Replace selected keys in dino_feats with aligned sam_feats.
+                features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
+            elif self.fuse_type == "fuse_head":
+                ###### test 3
+                sam_channel = features_aux['res2'].shape[1]
+                dino_channel = [v.shape[1] for v in features_main.values()]
+                if self.training:
+                    head = FeatureFusionHead(dino_channel, sam_channel).to(device).half()
+                else:
+                    head = FeatureFusionHead(dino_channel, sam_channel).to(device)
+                features = head(features_main, features_aux)
+            elif self.fuse_type == "edge_fusion":
+                model  = SemanticEdgeFusion().to(device)
+                features = model(features_main, features_aux)
+            elif self.fuse_type == "no_fuse":
+                # test 4  No fusion, use main features only
+                features = features_main
 
             # visualize and save features
-            ###
             if 0:
                 image_ids = [x["image_id"] for x in batched_inputs]
-                save_dir = "./backbone_feature_fuse_model_628-1/"
+                save_dir = "./backbone_feature_fuse_model_703/"
                 # Create the directory if it doesn't exist
                 os.makedirs(save_dir, exist_ok=True)
                 img_id = image_ids[0]
@@ -475,6 +494,7 @@ class DualBackboneMaskFormer(nn.Module):
                                                         n_components=3)
 
             outputs = self.sem_seg_head(features)
+
             if self.training:
                 # mask classification target
                 if "instances" in batched_inputs[0]:
