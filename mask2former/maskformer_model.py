@@ -395,7 +395,7 @@ class MaskFormer(nn.Module):
 
                     # 构建 ImageList
                     pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
-                    features = self.backbone(pad_images_4sam.tensor)  
+                    features = self.backbone(pad_images_4sam.tensor)
                     for k in features.keys():
                         feature_height = int(features[k].shape[2] / 2)
                         features[k] = features[k][:, :, 0:feature_height, :].half()
@@ -423,9 +423,9 @@ class MaskFormer(nn.Module):
                         # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
 
                 # visualize and save features
-                if 0:
+                if 1:
                     image_ids = [x["image_id"] for x in batched_inputs]
-                    save_dir = "./backbone_feature_sam_2/"
+                    save_dir = "./backbone_feature_sam_0705/"
                     # Create the directory if it doesn't exist
                     os.makedirs(save_dir, exist_ok=True)
                     img_id = image_ids[0]

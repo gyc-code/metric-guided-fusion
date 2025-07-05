@@ -46,15 +46,6 @@ class DinoV2BaseBackbone(Backbone):
             "res5": 1024,
         }
 
-        # -------------------------------------------------
-        if 0:
-            model_weight_file = "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
-            if model_weight_file:
-                checkpointer = DetectionCheckpointer(self, save_dir=None)
-                checkpointer.load(model_weight_file)
-            print('loaded dinov2 transformer weights from {}'.format(model_weight_file))
-        # -------------------------------------------------
-
 
     # def extract_hook(self):
     #     def hook(module, input, output):
@@ -100,7 +91,6 @@ class DinoV2LargeBackbone(Backbone):
     def __init__(self, cfg, input_shape):
         super().__init__()
         self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14').train()
-        # self.model = torch.load('/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth').train()
         del self.model.mask_token
         self.qkv_out = None
         self.token_size = 14

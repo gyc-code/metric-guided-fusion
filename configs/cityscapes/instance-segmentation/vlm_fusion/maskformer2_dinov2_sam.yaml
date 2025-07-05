@@ -11,25 +11,25 @@ MODEL:
     FROZE_BACKBONE: False
     FROZE_AUX_BACKBONE: True
     FROZE_BENCH_BACKBONE: True
-  SWIN: # fb version
+  SWIN: 
+    #### dinov2 fb version
     EMBED_DIM: 128
-    DEPTHS: [2, 2, 18, 2]
     NUM_HEADS: [4, 8, 16, 32]
+    #### dinov2 fb version
+
+    ### swin L version
+    # EMBED_DIM: 192
+    # NUM_HEADS: [6, 12, 24, 48]
+    ### swin L version
+
+
+    DEPTHS: [2, 2, 18, 2]
     WINDOW_SIZE: 12
     APE: False
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
 
-  # SWIN: # swin l
-  #   EMBED_DIM: 192
-  #   DEPTHS: [2, 2, 18, 2]
-  #   NUM_HEADS: [6, 12, 24, 48]
-  #   WINDOW_SIZE: 12
-  #   APE: False
-  #   DROP_PATH_RATE: 0.3
-  #   PATCH_NORM: True
-  #   PRETRAIN_IMG_SIZE: 384
   # WEIGHTS: "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
   WEIGHTS: ""
 

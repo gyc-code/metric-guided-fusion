@@ -449,7 +449,7 @@ class DualBackboneMaskFormer(nn.Module):
                     features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
                     # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
 
-            if 0:
+            if 1:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
             
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -482,9 +482,9 @@ class DualBackboneMaskFormer(nn.Module):
                 features = features_main
 
             # visualize and save features
-            if 0:
+            if 1:
                 image_ids = [x["image_id"] for x in batched_inputs]
-                save_dir = "./backbone_feature_fuse_model_703/"
+                save_dir = "./backbone_feature_fuse_model_705-1/"
                 # Create the directory if it doesn't exist
                 os.makedirs(save_dir, exist_ok=True)
                 img_id = image_ids[0]
