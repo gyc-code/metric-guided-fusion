@@ -449,7 +449,7 @@ class DualBackboneMaskFormer(nn.Module):
                     features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
                     # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
 
-            if 1:
+            if 0:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
             
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
