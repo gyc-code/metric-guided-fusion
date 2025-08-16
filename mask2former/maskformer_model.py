@@ -326,6 +326,7 @@ class MaskFormer(nn.Module):
                         losses.pop(k)
                 return losses
             else:
+                
                 mask_cls_results = outputs["pred_logits"]
                 mask_pred_results = outputs["pred_masks"]
                 # upsample masks
@@ -404,28 +405,36 @@ class MaskFormer(nn.Module):
                     #### crop image to be two parts for test, when input is 1024*2048
                     left_images = []
                     right_images = []
+                    # mid_images = []
                     for img in images:
                         # img: Tensor[C, H, W], 这里 H=1024, W=2048
                         C, H, W = img.shape
                         assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
                         left_images.append(img[:, :, :1024])
                         right_images.append(img[:, :, 1024:])
+                        # mid_images.append(img[:, :, 512:1536])  # cindy add, for auxiliary backbone
 
                     # 构建 ImageList
                     left_images = ImageList.from_tensors(left_images, self.size_divisibility)
                     features_left = self.backbone(left_images.tensor)  # cindy add auxiliary backbone
                     right_images = ImageList.from_tensors(right_images, self.size_divisibility)
                     features_right = self.backbone(right_images.tensor)  # cindy add auxiliary backbone
+                    # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
+                    # features_mid = self.backbone(mid_images.tensor)  # cindy add auxiliary backbone
+
                     features= {}
                     for k in features_left.keys():
                         # Concatenate left and right features along the channel dimension
                         features[k] = torch.cat((features_left[k], features_right[k]), dim=3)
+                        # feature_width = features[k].shape[3]
+                        # replace_band = int(feature_width / 8)
+                        # features[k] = features[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]  # Convert to half precision
                         # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
 
                 # visualize and save features
-                if 1:
+                if 0:
                     image_ids = [x["image_id"] for x in batched_inputs]
-                    save_dir = "./backbone_feature_sam_0705/"
+                    save_dir = "./backbone_feature_sam_0707_1/"
                     # Create the directory if it doesn't exist
                     os.makedirs(save_dir, exist_ok=True)
                     img_id = image_ids[0]

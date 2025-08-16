@@ -25,7 +25,7 @@ SOLVER:
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 180000
 TEST:
-  EVAL_PERIOD: 10
+  EVAL_PERIOD: 10000
 
 # INPUT:
 #   MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(10, 21)]"] #(5, 21)

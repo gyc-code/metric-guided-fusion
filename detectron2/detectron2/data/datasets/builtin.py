@@ -202,6 +202,9 @@ _RAW_CITYSCAPES_SPLITS = {
     
     
     "cityscapes_fine_{task}_train": ("cityscapes/leftImg8bit/train/", "cityscapes/gtFine/train/"),
+    "cityscapes_fine_{task}_train_small": ("cityscapes/leftImg8bit/train_small/", "cityscapes/gtFine/train_small/"),
+    "cityscapes_fine_{task}_train_experiment": ("cityscapes/leftImg8bit/train_experiment/", "cityscapes/gtFine/train_experiment/"),
+    
     # "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val_void255/"),
     "cityscapes_fine_{task}_val": ("cityscapes/leftImg8bit/val/", "cityscapes/gtFine/val/"),
     "cityscapes_fine_{task}_test": ("cityscapes/leftImg8bit/test/", "cityscapes/gtFine/test/"),

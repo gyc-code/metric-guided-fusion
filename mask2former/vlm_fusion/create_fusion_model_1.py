@@ -136,10 +136,9 @@ class ImprovedFusion(nn.Module):
         self.proj_s = nn.Conv2d(C_sam, C_dino, kernel_size=1, bias=False)
         self.dwconv = conv3x3(C_dino, C_dino, groups=C_dino)
         self.sobel_x, self.sobel_y = get_sobel_filters(C_dino)
-        self.beta = nn.Parameter(torch.tensor(1.0))  # 稳定起见从1.0开始
         self.fuse_conv = nn.Conv2d(2 * C_dino, C_dino, kernel_size=1, bias=False)
         self.act = nn.ReLU(inplace=True)
-        self.alpha = nn.Parameter(torch.tensor(1.0))
+        self.alpha = nn.Parameter(torch.tensor(0.5))
 
     def forward(self, F_dino, F_sam):
         # 特征对齐
@@ -154,16 +153,18 @@ class ImprovedFusion(nn.Module):
         edge_x = self.sobel_x(F_s)
         edge_y = self.sobel_y(F_s)
         edge = torch.sqrt(edge_x**2 + edge_y**2 + 1e-6)
-        # 边缘增强
-        F_s_enhanced = F_s * (1 + self.beta * edge)
+        
+        edge_mean = edge.mean().detach()
+        edge_std = edge.std().detach()
+        threshold = edge_mean + 1.0 * edge_std
 
-        # 拼接并融合
-        F_cat = torch.cat([F_dino, F_s_enhanced], dim=1)
-        F_fuse = self.act(self.fuse_conv(F_cat))
+        # threshold = edge.mean().detach()
+        edge_mask = (edge > threshold).float()
 
-        # 输出融合后的特征
-        return F_dino + self.alpha * F_fuse
-
+        # 直接作为mask融合
+        # F_dino_enhanced = F_dino + self.alpha * (F_s * edge_mask)
+        F_dino_enhanced = F_dino + self.alpha * edge_mask * F_dino.amax(dim=(2,3), keepdim=True)
+        return F_dino_enhanced
 
 class MultiStageFusion(nn.Module):
     """
@@ -221,30 +222,68 @@ def align_and_replace(dino_feats: dict, sam_feats: dict,
                       mapping: dict = None) -> dict:
     """
     Replace selected keys in dino_feats with aligned sam_feats.
-
     Args:
         dino_feats: dict of feature maps, e.g. {'res2': Tensor, ...}
         sam_feats : dict of feature maps, same keys
         mapping   : dict mapping sam_keys -> dino_keys
                     defaults to {'res2': 'res2', 'res3': 'res4'}
-
     Returns:
         Updated copy of dino_feats with replaced tensors.
     """
     # Work on a shallow copy to avoid side-effects
     out_feats = dino_feats.copy()
+    #  for sam
+    # if mapping is None:
+    #     mapping = {'res2': 'res2', 'res3': 'res4'}
+    #  for sam2
     if mapping is None:
-        mapping = {'res2': 'res2', 'res3': 'res4'}
+        mapping = {'res2': 'res2', 'res4': 'res4'}
+        
+    for sam_key, dino_key in mapping.items():
+        src = sam_feats.get(sam_key)
+        tgt = out_feats.get(dino_key)
+        # print('scr.shape :', src.shape, 'tgt.shape :', tgt.shape)
+        if src is None or tgt is None:
+            continue
+        out_feats[dino_key] = align_channels_and_spatial(src, tgt)
+    return out_feats
+
+def align_and_concat(dino_feats: dict, sam_feats: dict,
+                     mapping: dict = None) -> dict:
+    """
+    Concatenate selected keys from dino_feats and aligned sam_feats.
+    Args:
+        dino_feats: dict of feature maps, e.g. {'res2': Tensor, ...}
+        sam_feats : dict of feature maps, same keys
+        mapping   : dict mapping sam_keys -> dino_keys
+                    defaults to {'res2': 'res2', 'res4': 'res4'}
+    Returns:
+        Updated dict with concatenated tensors along channel dim.
+    """
+    out_feats = dino_feats.copy()
+    if mapping is None:
+        mapping = {'res2': 'res2','res3': 'res3', 'res4': 'res4',  'res5': 'res5'}
 
     for sam_key, dino_key in mapping.items():
         src = sam_feats.get(sam_key)
         tgt = out_feats.get(dino_key)
+        # print('scr.shape :', src.shape, 'tgt.shape :', tgt.shape)
         if src is None or tgt is None:
             continue
-        out_feats[dino_key] = align_channels_and_spatial(src, tgt)
+        if src.shape[-2:] != tgt.shape[-2:]:
+            src = F.interpolate(src, size=tgt.shape[-2:], mode='bilinear', align_corners=False)
+            
+        original_C = tgt.shape[1]
+        half_C = original_C // 2  # 通道减半
 
+        # 对齐空间尺寸并减小通道数        
+        src_reduced = nn.Conv2d(src.shape[1], half_C, kernel_size=1, bias=False).to(src.device)(src)
+        tgt_reduced = nn.Conv2d(original_C, half_C, kernel_size=1, bias=False).to(tgt.device)(tgt)
+        assert half_C + half_C == original_C
+        out_feats[dino_key] = torch.cat([tgt_reduced, src_reduced], dim=1)  # 通道拼接
+        # print('after align scr.shape :', src_reduced.shape, 'tgt.shape :', tgt_reduced.shape, out_feats[dino_key].shape)
+        
     return out_feats
-
 
 if __name__ == '__main__':
     device = 'cuda'
@@ -260,7 +299,20 @@ if __name__ == '__main__':
         'res4': torch.randn(1,256,64,64, device=device).half(),
         'res5': torch.randn(1,256,64,64, device=device).half(),
     }
+    # sam2
+    # "for input 512*2014: 
+    # outputs[0].shape torch.Size([3, 144, 128, 256])
+    # outputs[1].shape torch.Size([3, 288, 64, 128])
+    # outputs[2].shape torch.Size([3, 576, 32, 64])
+    # outputs[3].shape torch.Size([3, 1152, 16, 32])
 
+    sam2_feats = {
+        'res2': torch.randn(1,256,64,64, device=device).half(),
+        'res3': torch.randn(1,256,64,64, device=device).half(),
+        'res4': torch.randn(1,256,64,64, device=device).half(),
+        'res5': torch.randn(1,256,64,64, device=device).half(),
+    }
+    
     # 加载：
     dino_feat = np.load('dino.npy', allow_pickle=True)
     # np.load 返回一个 0-d ndarray，需要取出其中的 Python 对象

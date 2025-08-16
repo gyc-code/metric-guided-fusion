@@ -7,6 +7,7 @@ from torch.nn import functional as F
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import shutil
 
 from detectron2.config import configurable
 from detectron2.data import MetadataCatalog
@@ -23,10 +24,14 @@ from .modeling.criterion import SetCriterion
 from .modeling.matcher import HungarianMatcher
 from sklearn.decomposition import PCA
 from .vlm_fusion.create_fusion_model import SemanticEdgeFusion
-from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace
+from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace, align_and_concat
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 
+from hiera import Hiera
+
+
 DEBUG = True  # Set to True to enable debug features like feature visualization
+SHOW = False  # Set to True to visualize and save feature comparisons    
 
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
@@ -42,7 +47,7 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
     feature_keys = list(features_1.keys())
 
     # Column titles
-    titles = ["RGB", "SwinL", "DINOv2", "SAM", "Fused"]
+    titles = ["RGB", "SwinL", "DINOv2", "SAM2", "Fused"]
 
     for k in feature_keys:
         feats = [features_1[k], features_2[k], features_3[k], features_4[k]]
@@ -198,6 +203,12 @@ class DualBackboneMaskFormer(nn.Module):
             assert self.sem_seg_postprocess_before_inference
         ### fuse type
         self.fuse_type = fuse_type
+        if SHOW:
+            self.save_dir = "./debug_image/backbone_feature_fuse_model_804/"
+            # Create the directory if it doesn't exist
+            if os.path.exists(self.save_dir):
+                shutil.rmtree(self.save_dir)
+            os.makedirs(self.save_dir, exist_ok=True)
 
     @classmethod
     def from_config(cls, cfg):
@@ -256,9 +267,12 @@ class DualBackboneMaskFormer(nn.Module):
             importance_sample_ratio=cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO,
         )
 
+        if not DEBUG:
+            backbone_bench = None  # cindy add, set bench backbone to None if not in debug mode
         return {
             "backbone": backbone,
             "backbone_aux": backbone_aux, # cindy add auxiliary backbone
+            
             "backbone_bench": backbone_bench, # cindy add bench backbone
             "sem_seg_head": sem_seg_head,
             "criterion": criterion,
@@ -428,33 +442,43 @@ class DualBackboneMaskFormer(nn.Module):
                     features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
 
             else:
-                #### crop image to be two parts for test, when input is 1024*2048
-                left_images = []
-                right_images = []
-                for img in images:
-                    # img: Tensor[C, H, W], 这里 H=1024, W=2048
-                    C, H, W = img.shape
-                    assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
-                    left_images.append(img[:, :, :1024])
-                    right_images.append(img[:, :, 1024:])
+                features_aux = self.backbone_aux(images.tensor)
+                # #### crop image to be two parts for test, when input is 1024*2048
+                # left_images = []
+                # right_images = []
+                # # mid_images = []
+                # for img in images:
+                #     # img: Tensor[C, H, W], 这里 H=1024, W=2048
+                #     C, H, W = img.shape
+                #     assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
+                #     left_images.append(img[:, :, :1024])
+                #     right_images.append(img[:, :, 1024:])
+                #     # mid_images.append(img[:, :, 512:1536]) 
 
-                # 构建 ImageList
-                left_images = ImageList.from_tensors(left_images, self.size_divisibility)
-                features_left = self.backbone_aux(left_images.tensor)  # cindy add auxiliary backbone
-                right_images = ImageList.from_tensors(right_images, self.size_divisibility)
-                features_right = self.backbone_aux(right_images.tensor)  # cindy add auxiliary backbone
-                features_aux = {}
-                for k in features_left.keys():
-                    # Concatenate left and right features along the channel dimension
-                    features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
-                    # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+                # # 构建 ImageList
+                # left_images = ImageList.from_tensors(left_images, self.size_divisibility)
+                # features_left = self.backbone_aux(left_images.tensor)  # cindy add auxiliary backbone
+                # right_images = ImageList.from_tensors(right_images, self.size_divisibility)
+                # features_right = self.backbone_aux(right_images.tensor)  # cindy add auxiliary backbone
+                # # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
+                # # features_mid = self.backbone_aux(mid_images.tensor)  # cindy add auxiliary backbone
 
-            if 1:
+                # features_aux = {}
+                # for k in features_left.keys():
+                #     # Concatenate left and right features along the channel dimension
+                #     features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
+                #     # feature_width = features_aux[k].shape[3]
+                #     # replace_band = int(feature_width / 8)
+                #     # features_aux[k] = features_aux[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]
+                #     # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+
+            if DEBUG:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
             
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
             # type should be None, channel_replace, fuse_head, alpha_fuse
+
             if self.fuse_type == "alpha_fuse":
                 # test 1   F_dino + self.alpha * F_fuse
                 if self.training:
@@ -465,6 +489,10 @@ class DualBackboneMaskFormer(nn.Module):
             elif self.fuse_type == "channel_replace":
                 # test 2  Replace selected keys in dino_feats with aligned sam_feats.
                 features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
+                
+            elif self.fuse_type == "channel_concat":
+                features = align_and_concat(features_main, features_aux)
+                
             elif self.fuse_type == "fuse_head":
                 ###### test 3
                 sam_channel = features_aux['res2'].shape[1]
@@ -482,15 +510,12 @@ class DualBackboneMaskFormer(nn.Module):
                 features = features_main
 
             # visualize and save features
-            if 1:
+            if SHOW:
                 image_ids = [x["image_id"] for x in batched_inputs]
-                save_dir = "./backbone_feature_fuse_model_705-1/"
-                # Create the directory if it doesn't exist
-                os.makedirs(save_dir, exist_ok=True)
                 img_id = image_ids[0]
                 img_np = self.visualize_preprocess(images)
                 visualize_and_save_feature_comparison(features_bench, features_main, features_aux, features, 
-                                                        img_np, save_dir, img_id, 
+                                                        img_np, self.save_dir, img_id, 
                                                         n_components=3)
 
             outputs = self.sem_seg_head(features)

@@ -84,7 +84,11 @@ class DinoV2BaseBackbone(Backbone):
             feat_dict[k] = conv(new_patch)
 
         return feat_dict
-
+        
+    def freeze_backbone(self):
+        for param in self.parameters():
+            param.requires_grad = False
+            
 
 @BACKBONE_REGISTRY.register()
 class DinoV2LargeBackbone(Backbone):

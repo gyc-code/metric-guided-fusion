@@ -9,6 +9,12 @@ from scipy.optimize import linear_sum_assignment
 from torch import nn
 from torch.cuda.amp import autocast
 
+#### for vis
+# import os
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+#### for vis
+
 from detectron2.projects.point_rend.point_features import point_sample
 
 
@@ -91,14 +97,22 @@ class HungarianMatcher(nn.Module):
         assert cost_class != 0 or cost_mask != 0 or cost_dice != 0, "all costs cant be 0"
 
         self.num_points = num_points
+        
+        ###  vis
+        
+        # self.save_vis = True  # 是否保存 cost 可视化
+        # self.vis_limit = 50    # 最多保存多少张
+        # self.save_dir = "dino_sam_swinl_cost_vis_test"
+        # os.makedirs(self.save_dir, exist_ok=True)
+        # self.vis_count = 0
+            
+        ###  vis   
 
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets):
         """More memory-friendly matching"""
         bs, num_queries = outputs["pred_logits"].shape[:2]
-
         indices = []
-
         # Iterate through batch size
         for b in range(bs):
 
@@ -148,6 +162,21 @@ class HungarianMatcher(nn.Module):
             )
             C = C.reshape(num_queries, -1).cpu()
 
+            # ====== 可视化 ======
+            # print("C shape ::   ", C.shape)
+        
+            # if self.save_vis and self.vis_count < self.vis_limit:
+            #     plt.figure(figsize=(10, 8))
+            #     sns.heatmap(C.numpy(), cmap="viridis")
+            #     plt.title(f"Cost Matrix - Sample {self.vis_count} (Queries x GTs)")
+            #     plt.xlabel("GT Index")
+            #     plt.ylabel("Query Index")
+            #     plt.tight_layout()
+            #     plt.savefig(os.path.join(self.save_dir, f"cost_matrix_{self.vis_count}_dino2.png"))
+            #     plt.close()
+            #     self.vis_count += 1
+            # ====================
+        
             indices.append(linear_sum_assignment(C))
 
         return [

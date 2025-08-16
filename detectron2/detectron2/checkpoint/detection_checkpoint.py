@@ -73,7 +73,7 @@ class DetectionCheckpointer(Checkpointer):
             with PathManager.open(filename, "rb") as f:
                 data = pickle.load(f, encoding="latin1")
                 
-            if "coco-mask2formwe-200queries-swinL-100epoch-model_final" in filename:
+            if "coco-mask2formwe-200queries-swinL-100epoch-model_final" in filename or "swin_large_patch4" in filename:
                 prefix = "backbone."
                 stripped_dict = {}
                 for k, v in data['model'].items():
@@ -123,7 +123,15 @@ class DetectionCheckpointer(Checkpointer):
                         # new_key = key.replace("image_encoder.", "", 1)  # from "image_encoder." to "backbone." backbone.patch_embed.proj.weight  image_encoder.blocks.0.norm1.weight
                         new_weights[new_key] = loaded[key]
                 loaded = new_weights
-
+            elif "sam2.1_hiera" in filename:
+                new_weights = {}
+                for key in loaded['model'].keys():
+                    if key.startswith("image_encoder."):
+                        # backbone.trunk.blocks.0.attn.qkv.weight', image_encoder.trunk.blocks.0.attn.qkv.bias
+                        new_key = key.replace("image_encoder", "backbone", 1)
+                        new_weights[new_key] = loaded['model'][key]
+                loaded['model'] = new_weights
+                
         if "model" not in loaded:
             loaded = {"model": loaded}
         assert self._parsed_url_during_load is not None, "`_load_file` must be called inside `load`"

@@ -54,18 +54,15 @@ ONLY_VAL = False
 
 "python demo.py --opts MODEL.WEIGHTS detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl"
 
-
-
-
 def get_parser():
     parser = argparse.ArgumentParser(description="Detectron2 demo for builtin configs")
     parser.add_argument(
         "--config-file",
-        # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinoV2.yaml",
-        default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_sam.yaml",
+        # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_base_bs16_50ep.yaml",
+        # default="configs/cityscapes/instance-segmentation/sam2/maskformer2_sam2.yaml",
         # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_large_bs16_50ep.yaml",
         # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
-        # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_kitti.yaml",
+        default="configs/cityscapes/instance-segmentation/vlm_fusion/maskformer2_dinov2_sam.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -86,7 +83,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_feature/sam_freeze_error_map/',
+        default='visual_feature/dino_sam_2_250809_0.5/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -100,12 +97,11 @@ def get_parser():
         "--opts",
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl'],
-        # default=['MODEL.WEIGHTS','./output_vlm/cs_freeze_true/model_0039999.pth'],
-        default=['MODEL.WEIGHTS','./output_vlm/cs_freeze_90k_sam_vit_base/model_0089999.pth'],
+        # default=['MODEL.WEIGHTS','./output_vlm_link/facebook_version_test_dinov2/cs_fire_correct_90k_vitb_fb_512_1024/model_0089999.pth'],
+        # default=['MODEL.WEIGHTS',"./output_vlm_link/sam2/cs_freeze_180k_sam2_vit_huge_180k/model_0179999.pth"],
+        default=['MODEL.WEIGHTS',"./output_vlm_link/fuse/806_test1_alpha_edge_fuse_cs_dino_fire_sam2_freeze_180k_512_1024_bs3/model_0179999.pth"],
         # default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output/instan_seg/mask2former_cs2cs/model_final.pth'],
         # default=['MODEL.WEIGHTS','/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth'],
-        
-
         nargs=argparse.REMAINDER,
     )
     return parser
@@ -127,8 +123,8 @@ def process_one(path, demo, _metadata, result_save_folder, visul_save_folder, ot
 
     cpu_device = torch.device("cpu")
     instances = predictions['instances'].to(cpu_device)
-    instances = instances[instances.scores.cpu() > 0.85]
-    # instances = instances[instances.scores.cpu() > 0.3]
+    # instances = instances[instances.scores.cpu() > 0.85]
+    instances = instances[instances.scores.cpu() > 0.5]
 
     num_instances = len(instances)
     print('num_instances:', num_instances)
@@ -143,10 +139,9 @@ def process_one(path, demo, _metadata, result_save_folder, visul_save_folder, ot
         result_save_folder, basename, file_name, dataset_name, error_map_filename, out_filename, mask_img)
 
 
-def process_all(inputs, demo, result_save_folder, visul_save_folder, error_map_save_folder):
-    _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+def process_all(inputs, demo, metadata, result_save_folder, visul_save_folder, error_map_save_folder, dataset_name='cityscapes'):
     for path in tqdm.tqdm(inputs):
-        process_one(path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder, dataset_name='kitti360')
+        process_one(path, demo, metadata, result_save_folder, visul_save_folder, error_map_save_folder, dataset_name)
 
 
 if __name__ == "__main__":
@@ -154,12 +149,15 @@ if __name__ == "__main__":
         args = get_parser().parse_args()
         result_save_folder, visul_save_folder, other_map_save_folder  = preparation(args.output)
 
-        '''  input multi model, seperate by ' ', run loop'''
+        '''  input multi model, seperate by, run loop'''
         args_copy = copy.deepcopy(args)
-        model_weights = args_copy.opts[1].split(' ')
-        model = model_weights[0]
+        model_weights_path = args_copy.opts[1].split(' ')
+        model = model_weights_path[0]
         args.opts[1] = model
-        cfg = setup_cfg(args)
+        if "/fuse/" in model_weights_path[0]:    
+            cfg = setup_dual_backbone_cfg(args)
+        else:
+            cfg = setup_cfg(args)
         demo = VisualizationDemo(cfg)
         target = '-'
         args_input = args.input
@@ -176,18 +174,19 @@ if __name__ == "__main__":
                 else:
                     raise ValueError("Unsupported file type. Please provide a valid directory or text file.")
 
-        # process_all(inputs, demo, result_save_folder, visul_save_folder, other_map_save_folder)
-        ''' multi-process '''
-        mp.set_start_method("spawn", force=True)
-        # mp.set_start_method("fork", force=True)
-        _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
-        paramers = []
         dataset_name = 'cityscapes'
-        for i in range(len(inputs)):
-            paramers.append((inputs[i], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name))
-        # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
-        pool = mp.Pool(processes=2)
-        pool.starmap(process_one, paramers)
+
+        _metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+        process_all(inputs, demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name=dataset_name)
+        ''' multi-process '''
+        if 0:
+            mp.set_start_method("spawn", force=True)
+            paramers = []
+            for i in range(len(inputs)):
+                paramers.append((inputs[i], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name))
+            # input :path, demo, _metadata, result_save_folder, visul_save_folder, error_map_save_folder
+            pool = mp.Pool(processes=2)
+            pool.starmap(process_one, paramers)
         # debug
         # process_one(inputs[0], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name)
     

@@ -2,9 +2,11 @@ _BASE_: ../maskformer2_R50_bs16_90k.yaml
 MODEL:
   META_ARCHITECTURE: "DualBackboneMaskFormer"
   BACKBONE:
-    NAME: "DinoV2BaseBackbone"
+    NAME:  "DinoV2BaseBackbone"
   BACKBONE_AUX:
-    NAME: "ImageEncoderViT"
+    # NAME: "ImageEncoderViT"
+    NAME: "ImageEncoder2"
+
   BACKBONE_BENCH:
     NAME: "D2SwinTransformer"
   MASK_FORMER:
@@ -17,7 +19,7 @@ MODEL:
     NUM_HEADS: [4, 8, 16, 32]
     #### dinov2 fb version
 
-    ### swin L version
+    ### swin L version open if need bench weight
     # EMBED_DIM: 192
     # NUM_HEADS: [6, 12, 24, 48]
     ### swin L version
@@ -33,11 +35,11 @@ MODEL:
   # WEIGHTS: "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
   WEIGHTS: ""
 
-  WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_h_4b8939.pth"
+  WEIGHTS_AUX: "./pretrain/sam2.1_hiera_base_plus.pt" #"./pretrain/sam2.1_hiera_large.pt"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_l_0b3195.pth"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
-  # WEIGHTS_BENCH: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl"
-  WEIGHTS_BENCH: ""
+  WEIGHTS_BENCH: "./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # use swin L config EMBED_DIM: 128
+  # WEIGHTS_BENCH: ""
   # "pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
   # WEIGHTS_BENCH: "./pretrain/swin_large_patch4_window12_384_22k.pkl"
 
@@ -60,17 +62,7 @@ INPUT:
     TYPE: "absolute"
     SIZE:  (512, 1024)
 DATASETS:
-  TRAIN: ("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
-  #('urbansyn_category_human_cycle_instance_seg_train',)
-  # ("uda_syn_real_instance_seg_train",)
-  #("synscapes_human_cycle_instance_seg_train",)
-  #("synscapes_instance_seg_train",) 
-  #("urbansyn_vehicle_instance_seg_train",)
-  # ("uda_syn_real_vehicle_instance_seg_train",)
-  # ("uda_syn_real_human_cycle_instance_seg_train",)
-  # #("uda_syn_real_instance_seg_train",)
-  #("urbansyn_vehicle_instance_seg_train",)
-  # ("uda_syn_real_human_cycle_instance_seg_train",)
+  TRAIN: ("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)
 
-FUSE_TYPE: "no_fuse" ###  type should be no_fuse, channel_replace, fuse_head, alpha_fuse, edge_fusion
+FUSE_TYPE: "fuse_head" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,
