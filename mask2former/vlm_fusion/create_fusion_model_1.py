@@ -130,15 +130,82 @@ def get_sobel_filters(channel):
     for p in conv_y.parameters(): p.requires_grad = False
     return conv_x, conv_y
 
+
+class RSIFusion(nn.Module):
+    def __init__(self, c_in, use_ms_edge=True):
+        super().__init__()
+        # 1) 通道与统计对齐（SAM2 -> DINOv2）
+        self.align = nn.Sequential(
+            nn.Conv2d(c_in, c_in, 1, bias=False),
+            nn.GroupNorm(32, c_in)  # 或 LayerNorm2d/InstanceNorm2d
+        )
+        # 2) 空间门控：多尺度边缘
+        k = 3
+        self.sobel_x = nn.Conv2d(c_in, 1, (1, k), padding=(0, k//2), bias=False)
+        self.sobel_y = nn.Conv2d(c_in, 1, (k, 1), padding=(k//2, 0), bias=False)
+        with torch.no_grad():
+            sx = torch.tensor([[1,0,-1]], dtype=torch.float32).view(1,1,1,3)
+            sy = torch.tensor([[1],[0],[-1]], dtype=torch.float32).view(1,1,3,1)
+            self.sobel_x.weight.zero_(); self.sobel_y.weight.zero_()
+            self.sobel_x.weight[:, :, :, :] = sx
+            self.sobel_y.weight[:, :, :, :] = sy
+
+        self.edge_conv = nn.Conv2d(3 if use_ms_edge else 1, 1, 3, padding=1)
+        self.use_ms_edge = use_ms_edge
+
+        # 3) 通道门控：SE
+        self.se_fc1 = nn.Conv2d(c_in, c_in//4, 1)
+        self.se_fc2 = nn.Conv2d(c_in//4, c_in, 1)
+
+        # 4) 注入强度：per-channel γ，零初始化
+        self.gamma = nn.Parameter(torch.zeros(1, c_in, 1, 1))
+
+        # 5) 高频提取与平滑
+        self.blur = nn.AvgPool2d(3, stride=1, padding=1)
+        self.dwconv = nn.Conv2d(c_in, c_in, 3, padding=1, groups=c_in)  # 轻量几何滤波
+
+    def spatial_gate(self, Fs):  # Fs: [B,C,H,W] (对齐后)
+        # 边缘强度
+        ex = self.sobel_x(Fs); ey = self.sobel_y(Fs)
+        e = torch.sqrt(ex**2 + ey**2 + 1e-6)  # [B,1,H,W]（按通道聚合到1）
+        # 归一化到每图：
+        m = e.mean(dim=(2,3), keepdim=True); s = e.std(dim=(2,3), keepdim=True) + 1e-6
+        e = (e - m) / s
+        if self.use_ms_edge:
+            e2 = F.avg_pool2d(e, 3, 1, 1)
+            e3 = F.interpolate(F.avg_pool2d(e, 5, 2, 2), size=e.shape[-2:], mode='bilinear', align_corners=False)
+            e = torch.cat([e, e2, e3], dim=1)             # [B,3,H,W]
+        g_sp = torch.sigmoid(self.edge_conv(e))           # [B,1,H,W]
+        return g_sp
+
+    def channel_gate(self, Fd):   # Fd: [B,C,H,W]
+        z = F.adaptive_avg_pool2d(Fd, 1)                  # [B,C,1,1]
+        z = F.relu(self.se_fc1(z))
+        g_ch = torch.sigmoid(self.se_fc2(z))              # [B,C,1,1]
+        return g_ch
+
+    def forward(self, F_dino, F_sam):
+        # 对齐 SAM2
+        Fs = self.align(F_sam)
+        # 高频（只注入边缘/细节）
+        Fs_hf = self.dwconv(Fs - self.blur(Fs))
+        # 门控
+        g_sp = self.spatial_gate(Fs)
+        g_ch = self.channel_gate(F_dino)
+        # 残差软注入（γ 零初始，训练学强度）
+        F_out = F_dino + self.gamma * g_sp * g_ch * Fs_hf
+        return F_out, {"gate_sp": g_sp, "gate_ch": g_ch, "Fs_hf": Fs_hf}
+
+
 class ImprovedFusion(nn.Module):
-    def __init__(self, C_dino, C_sam=256):
+    def __init__(self, C_dino, C_sam=256, alpha=0.5):
         super().__init__()
         self.proj_s = nn.Conv2d(C_sam, C_dino, kernel_size=1, bias=False)
         self.dwconv = conv3x3(C_dino, C_dino, groups=C_dino)
         self.sobel_x, self.sobel_y = get_sobel_filters(C_dino)
         self.fuse_conv = nn.Conv2d(2 * C_dino, C_dino, kernel_size=1, bias=False)
         self.act = nn.ReLU(inplace=True)
-        self.alpha = nn.Parameter(torch.tensor(0.5))
+        self.alpha = nn.Parameter(torch.tensor(alpha))
 
     def forward(self, F_dino, F_sam):
         # 特征对齐
@@ -162,7 +229,6 @@ class ImprovedFusion(nn.Module):
         edge_mask = (edge > threshold).float()
 
         # 直接作为mask融合
-        # F_dino_enhanced = F_dino + self.alpha * (F_s * edge_mask)
         F_dino_enhanced = F_dino + self.alpha * edge_mask * F_dino.amax(dim=(2,3), keepdim=True)
         return F_dino_enhanced
 
@@ -170,12 +236,12 @@ class MultiStageFusion(nn.Module):
     """
     对 DINOv2 res2/res5 四阶段分别应用 ImprovedFusion。
     """
-    def __init__(self):
+    def __init__(self, alpha=0.5):
         super().__init__()
-        self.fuse2 = ImprovedFusion(C_dino=128,  C_sam=256)
-        self.fuse3 = ImprovedFusion(C_dino=256,  C_sam=256)
-        self.fuse4 = ImprovedFusion(C_dino=512,  C_sam=256)
-        self.fuse5 = ImprovedFusion(C_dino=1024, C_sam=256)
+        self.fuse2 = ImprovedFusion(C_dino=128,  C_sam=112, alpha=alpha)
+        self.fuse3 = ImprovedFusion(C_dino=256,  C_sam=224, alpha=alpha)
+        self.fuse4 = ImprovedFusion(C_dino=512,  C_sam=448, alpha=alpha)
+        self.fuse5 = ImprovedFusion(C_dino=1024, C_sam=896, alpha=alpha)
 
     def forward(self, dino_feats: dict, sam_feats: dict) -> dict:
         return {
@@ -288,10 +354,11 @@ def align_and_concat(dino_feats: dict, sam_feats: dict,
 if __name__ == '__main__':
     device = 'cuda'
     dino_feats = {
-        'res2': torch.randn(1, 128, 256, 256, device=device).half(),
-        'res3': torch.randn(1, 256, 128, 128, device=device).half(),
-        'res4': torch.randn(1, 512, 64,  64, device=device).half(),
-        'res5': torch.randn(1,1024, 32,  32, device=device).half(),
+        # "for input 512*2014: 
+        'res2': torch.randn(1, 128, 128, 256, device=device).half(),
+        'res3': torch.randn(1, 256, 64, 128, device=device).half(),
+        'res4': torch.randn(1, 512, 32,  64, device=device).half(),
+        'res5': torch.randn(1, 1024, 16,  32, device=device).half(),
     }
     sam_feats = {
         'res2': torch.randn(1,256,64,64, device=device).half(),
@@ -301,16 +368,15 @@ if __name__ == '__main__':
     }
     # sam2
     # "for input 512*2014: 
-    # outputs[0].shape torch.Size([3, 144, 128, 256])
-    # outputs[1].shape torch.Size([3, 288, 64, 128])
-    # outputs[2].shape torch.Size([3, 576, 32, 64])
-    # outputs[3].shape torch.Size([3, 1152, 16, 32])
-
+    # outputs[0].shape torch.Size([3, 112, 128, 256])
+    # outputs[1].shape torch.Size([3, 224, 64, 128])
+    # outputs[2].shape torch.Size([3, 448, 32, 64])
+    # outputs[3].shape torch.Size([3, 896, 16, 32])
     sam2_feats = {
-        'res2': torch.randn(1,256,64,64, device=device).half(),
-        'res3': torch.randn(1,256,64,64, device=device).half(),
-        'res4': torch.randn(1,256,64,64, device=device).half(),
-        'res5': torch.randn(1,256,64,64, device=device).half(),
+        'res2': torch.randn(1,112,128,256, device=device).half(),
+        'res3': torch.randn(1,224,64,128, device=device).half(),
+        'res4': torch.randn(1,448,32,64, device=device).half(),
+        'res5': torch.randn(1,896,16,32, device=device).half(),
     }
     
     # 加载：

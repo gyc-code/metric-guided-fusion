@@ -10,12 +10,13 @@ import torch
 from PIL import Image
 
 from detectron2.data import MetadataCatalog
+from detectron2.data.detection_utils import read_image
 from detectron2.utils import comm
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.utils import decode_seg_map_sequence
 from detectron2.utils.visualizer import Visualizer, ColorMode
 from .evaluator import DatasetEvaluator
-
+import shutil
 
 def process_train_id_to_color_img(img_train_id, dataset='cityscapes'):
     h, w = img_train_id.shape
@@ -110,22 +111,28 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
 
     def process(self, inputs, outputs):
         from cityscapesscripts.helpers.labels import name2label
+        # if self._working_dir is not empty, clean it
 
         for input, output in zip(inputs, outputs):
             file_name = input["file_name"]
             basename = os.path.splitext(os.path.basename(file_name))[0]
-            pred_txt = os.path.join(self._working_dir, "predictions", basename + "_pred.txt")
-            if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_masks")):
-                os.makedirs(os.path.join(self._working_dir, "predictions", "instance_masks"))
+            pred_txt = os.path.join(self._working_dir, "predictions", "result", basename + "_pred.txt")
+                
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "result")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "result"))
             if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
                 os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
             if self.save_instances:
-                self.coco_metadata = MetadataCatalog.get("coco_2017_val_panoptic")
-                im = cv2.imread(file_name)
-                v = Visualizer(im[:, :, ::-1], self.coco_metadata, scale=1.2, instance_mode=ColorMode.IMAGE_BW)
-                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device)).get_image()
-                cv2.imwrite(os.path.join(self._working_dir, "predictions", "instance_visualization", basename + ".png"),
-                            instance_result)
+                self.cs_metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+                # im = cv2.imread(file_name)
+                im = read_image(file_name, format="BGR")
+                v = Visualizer(im[:, :, ::-1], self.cs_metadata, scale=1.2, instance_mode=ColorMode.IMAGE)
+
+                # instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device)).get_image()
+                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device))
+                instance_result.save(self._working_dir + os.sep + "predictions" + os.sep + "instance_visualization" + os.sep +  basename + ".png")
+                # cv2.imwrite(os.path.join(self._working_dir, "predictions", "instance_visualization", basename + ".png"),
+                #             instance_result)
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
                 # output = output[output.scores > 0.1]  ##  cindy add , filter will decrease ap
@@ -138,7 +145,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
                         score = output.scores[i]
                         mask = output.pred_masks[i].numpy().astype("uint8")
                         png_filename = os.path.join(
-                            self._working_dir, "predictions", "instance_masks", basename + "_{}_{}.png".format(i, classes)
+                            self._working_dir, "predictions", "result", basename + "_{}_{}.png".format(i, classes)
                         )
                         # vs_png_filename = os.path.join(
                         #     self._temp_dir, basename + "_{}_{}_{}.png".format(i, classes, str(score.item()))
@@ -147,8 +154,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
                         # Image.fromarray(mask * 255).save(vs_png_filename)
 
                         fout.write(
-                            "{} {} {}\n".format(os.path.join("instance_masks", os.path.basename(png_filename)),
-                                                class_id, score)
+                            "{} {} {}\n".format( os.path.basename(png_filename), class_id, score)
                         )
             else:
                 # Cityscapes requires a prediction file for every ground truth image.
@@ -164,11 +170,12 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         if comm.get_rank() > 0:
             return
         import cityscapesscripts.evaluation.evalInstanceLevelSemanticLabeling as cityscapes_eval
-
         self._logger.info("Evaluating results under {} ...".format(self._working_dir))
 
         # set some global states in cityscapes evaluation API, before evaluating
-        cityscapes_eval.args.predictionPath = os.path.abspath(os.path.join(self._working_dir, "predictions"))
+        # cityscapes_eval.args.predictionPath = os.path.abspath(os.path.join(self._working_dir, "predictions"))
+        cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result")
+
         cityscapes_eval.args.predictionWalk = None
         cityscapes_eval.args.JSONOutput = False
         cityscapes_eval.args.colorized = False
@@ -186,22 +193,16 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         predictionImgList = []
         for gt in groundTruthImgList:
             predictionImgList.append(cityscapes_eval.getPrediction(gt, cityscapes_eval.args))
-        try:
-            results = cityscapes_eval.evaluateImgLists(
-                predictionImgList, groundTruthImgList, cityscapes_eval.args, self._logger
-            )["averages"]
-
-            ret = OrderedDict()
-            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            #ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100, "AP50m": results["allAp50m"] * 100,
-            #               "AP100m": results["allAp100m"] * 100, "AP50%50m": results["allAp50%50m"] * 100}
-            #self._working_dir.cleanup()
-            self._logger.info(ret)
-            return ret
-        except:
-            print('------------ error happen in eval')
-            #self._working_dir.cleanup()
-            return None
+        # try:
+        results = cityscapes_eval.evaluateImgLists(predictionImgList, groundTruthImgList, cityscapes_eval.args)["averages"]
+        ret = OrderedDict()
+        ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+        shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
+        self._logger.info(ret)
+        return ret
+        # except:
+        #     print('------------ error happen in eval')
+        #     return None
 
 
 class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):

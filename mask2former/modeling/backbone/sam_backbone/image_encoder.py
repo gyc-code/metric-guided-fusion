@@ -56,7 +56,9 @@ class ImageEncoderViT(Backbone):
 
         # Override with config values if available
         if cfg.MODEL.BACKBONE.NAME == "ImageEncoderViT":
-            model_weight_file = cfg.MODEL.WEIGHTS
+            # model_weight_file = cfg.MODEL.WEIGHTS
+            model_weight_file = "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
+
         else:
             model_weight_file = cfg.MODEL.WEIGHTS_AUX
 
@@ -148,28 +150,31 @@ class ImageEncoderViT(Backbone):
         # ==== 在这里加载预训练权重 ====
         ##  only load backbone weights, not the whole model
         # 1) 加载 checkpoint（直接拿它当 state_dict）
+        
         ckpt = torch.load(model_weight_file, map_location="cuda")
-        # ckpt 本身就是个 state_dict，没有 "model" 键
-
         # 2) strip 掉所有 key 的前缀 "image_encoder."
         prefix = "image_encoder."
         stripped_dict = {}
-        for k, v in ckpt.items():
+        for k, v in ckpt.items():  
             if k.startswith(prefix):
-                new_k = k[len(prefix):]  # 去掉前缀
+                new_k = k[len(prefix):]
                 stripped_dict[new_k] = v
             else:
                 # 如果有些 key 本来就匹配模型，也可以直接保留：
                 stripped_dict[k] = v
-        # 3) 再加载到模块里
+            
+        print('model dict : ', len(self.state_dict().keys()))
+        print('ckpt dict : ', len(stripped_dict.keys()))
         missing, unexpected = self.load_state_dict(stripped_dict, strict=False)
         # 4) 打印一下，让你确认哪些没对上
+        print("correct keys:", len(stripped_dict) - len(missing) - len(unexpected) )
         if missing or unexpected:
             print("total key :", len(stripped_dict))
             print("missing keys:", len(missing))    
             print("unexpected keys:", len(unexpected))
-            print(f"[Warning] SAM ViT backbone loaded with missing keys: {missing}")
-            print(f"[Warning] SAM ViT backbone loaded with unexpected keys: {unexpected}")
+            print(f"[Warning] SAM2 ViT backbone loaded with missing keys: {missing}")
+            print(f"[Warning] SAM2 ViT backbone loaded with unexpected keys: {unexpected}")
+            print('loaded sam2 backbone')
         # ==== 权重加载完毕，后续可以正常 forward ====
 
     def get_divisible_size(self, w, h):

@@ -377,70 +377,72 @@ class MaskFormer(nn.Module):
             images = [x["image"].to(self.device) for x in batched_inputs]
             images = [(x - self.pixel_mean) / self.pixel_std for x in images]
             images = ImageList.from_tensors(images, self.size_divisibility)
-
-            if self.backbone.__class__.__name__ != "ImageEncoderViT":
-                features = self.backbone(images.tensor)
-
-            else:
-            ### when test, use square bracket to be the input for sam backbone
-                if self.training:
-                    #### pad for sam when input size is 512*1024
-                    padded_images = []
-                    for img in images:
-                        # img: Tensor[C, H, W], 这里 H=512, W=1024
-                        C, H, W = img.shape
-                        assert H == 512 and W == 1024, "for training, input size 3*512*1024"
-                        # 在高度维度上重复两遍
-                        img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
-                        padded_images.append(img_tiled)
-
-                    # 构建 ImageList
-                    pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
-                    features = self.backbone(pad_images_4sam.tensor)
-                    for k in features.keys():
-                        feature_height = int(features[k].shape[2] / 2)
-                        features[k] = features[k][:, :, 0:feature_height, :].half()
+            features = self.backbone(images.tensor)
+            if 0: #  only for fuse train with sam/sam2
+                if self.backbone.__class__.__name__ != "ImageEncoderViT":
+                    features = self.backbone(images.tensor)
 
                 else:
-                    #### crop image to be two parts for test, when input is 1024*2048
-                    left_images = []
-                    right_images = []
-                    # mid_images = []
-                    for img in images:
-                        # img: Tensor[C, H, W], 这里 H=1024, W=2048
-                        C, H, W = img.shape
-                        assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
-                        left_images.append(img[:, :, :1024])
-                        right_images.append(img[:, :, 1024:])
-                        # mid_images.append(img[:, :, 512:1536])  # cindy add, for auxiliary backbone
+                ### when test, use square bracket to be the input for sam backbone
+                    if self.training:
+                        #### pad for sam when input size is 512*1024
+                        padded_images = []
+                        for img in images:
+                            # img: Tensor[C, H, W], 这里 H=512, W=1024
+                            C, H, W = img.shape
+                            assert H == 512 and W == 1024, "for training, input size 3*512*1024"
+                            # 在高度维度上重复两遍
+                            img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
+                            padded_images.append(img_tiled)
 
-                    # 构建 ImageList
-                    left_images = ImageList.from_tensors(left_images, self.size_divisibility)
-                    features_left = self.backbone(left_images.tensor)  # cindy add auxiliary backbone
-                    right_images = ImageList.from_tensors(right_images, self.size_divisibility)
-                    features_right = self.backbone(right_images.tensor)  # cindy add auxiliary backbone
-                    # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
-                    # features_mid = self.backbone(mid_images.tensor)  # cindy add auxiliary backbone
+                        # 构建 ImageList
+                        pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
+                        features = self.backbone(pad_images_4sam.tensor)
+                        for k in features.keys():
+                            feature_height = int(features[k].shape[2] / 2)
+                            features[k] = features[k][:, :, 0:feature_height, :].half()
 
-                    features= {}
-                    for k in features_left.keys():
-                        # Concatenate left and right features along the channel dimension
-                        features[k] = torch.cat((features_left[k], features_right[k]), dim=3)
-                        # feature_width = features[k].shape[3]
-                        # replace_band = int(feature_width / 8)
-                        # features[k] = features[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]  # Convert to half precision
-                        # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+                    else:
+                        #### crop image to be two parts for test, when input is 1024*2048
+                        left_images = []
+                        right_images = []
+                        # mid_images = []
+                        for img in images:
+                            # img: Tensor[C, H, W], 这里 H=1024, W=2048
+                            C, H, W = img.shape
+                            assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
+                            left_images.append(img[:, :, :1024])
+                            right_images.append(img[:, :, 1024:])
+                            # mid_images.append(img[:, :, 512:1536])  # cindy add, for auxiliary backbone
 
-                # visualize and save features
-                if 0:
-                    image_ids = [x["image_id"] for x in batched_inputs]
-                    save_dir = "./backbone_feature_sam_0707_1/"
-                    # Create the directory if it doesn't exist
-                    os.makedirs(save_dir, exist_ok=True)
-                    img_id = image_ids[0]
-                    img_np = self.visualize_preprocess(images)
-                    self.visualize_and_save_features_on_images(features, img_np, save_dir, img_id)
-                    self.visualize_features_with_pca(features, save_dir, img_id)
+                        # 构建 ImageList
+                        left_images = ImageList.from_tensors(left_images, self.size_divisibility)
+                        features_left = self.backbone(left_images.tensor)  # cindy add auxiliary backbone
+                        right_images = ImageList.from_tensors(right_images, self.size_divisibility)
+                        features_right = self.backbone(right_images.tensor)  # cindy add auxiliary backbone
+                        # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
+                        # features_mid = self.backbone(mid_images.tensor)  # cindy add auxiliary backbone
+
+                        features= {}
+                        for k in features_left.keys():
+                            # Concatenate left and right features along the channel dimension
+                            features[k] = torch.cat((features_left[k], features_right[k]), dim=3)
+                            # feature_width = features[k].shape[3]
+                            # replace_band = int(feature_width / 8)
+                            # features[k] = features[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]  # Convert to half precision
+                            # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+
+            # visualize and save features
+            if 0:
+                print('draw----')
+                image_ids = [x["image_id"] for x in batched_inputs]
+                save_dir = "./debug_image/backbone_feature_fuse_model_0826/"
+                # Create the directory if it doesn't exist
+                os.makedirs(save_dir, exist_ok=True)
+                img_id = image_ids[0]
+                img_np = self.visualize_preprocess(images)
+                self.visualize_and_save_features_on_images(features, img_np, save_dir, img_id)
+                self.visualize_features_with_pca(features, save_dir, img_id)
 
             outputs = self.sem_seg_head(features)
             if self.training:

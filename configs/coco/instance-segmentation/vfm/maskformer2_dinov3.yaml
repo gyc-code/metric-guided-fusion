@@ -1,30 +1,28 @@
-_BASE_: ../maskformer2_R50_bs16_90k.yaml
+_BASE_: ../maskformer2_R50_bs16_50ep.yaml
 MODEL:
   BACKBONE:
-    NAME: "DinoV2BaseBackbone" #"DinoV2BaseAdapterBackbone"
+    NAME: "DinoV3Backbone"
   MASK_FORMER:
     FROZE_BACKBONE: False
   SWIN:
-    EMBED_DIM: 128
+    EMBED_DIM: 128 #192
     DEPTHS: [2, 2, 18, 2]
-    NUM_HEADS: [4, 8, 16, 32]
+    NUM_HEADS: [4, 8, 16, 32] #[6, 12, 24, 48]
     WINDOW_SIZE: 12
     APE: False
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
   WEIGHTS: ""
-  ##  for debug
-  # WEIGHTS: "./output_vlm_link/facebook_version_test_dinov2/cs_fire_correct_90k_vitb_fb_512_1024/model_0089999.pth" 
+  WEIGHTS_BACKBONE: "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth"
+  # dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth
+  BACKBONE_EMB_DIM: 1280  #4096-7B, 1536-giant2, 1280-huge2,  1024-L, 768-base
+  WEIGHTS_BACKBONE_NAME: dinov3_vith16plus
 
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
-SOLVER:
-  IMS_PER_BATCH: 3
-  CHECKPOINT_PERIOD: 180000
-TEST:
-  EVAL_PERIOD: 10000
-
+  MASK_FORMER:
+    NUM_OBJECT_QUERIES: 200
 
 INPUT:
   MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
@@ -37,9 +35,10 @@ INPUT:
     TYPE: "absolute"
     SIZE:  (512, 1024)
 
-##  for debug
-DATASETS:
-  TRAIN: ("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
-  TEST: ("cityscapes_fine_instance_seg_val",) # ("cityscapes_fine_instance_seg_val",)
-
-ViT_USE_ADAPTER: False
+SOLVER:
+  STEPS: (327778, 355092)
+  MAX_ITER: 368750
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 368750
+TEST:
+  EVAL_PERIOD: 36875

@@ -37,3 +37,7 @@ from .vlm_fusion.create_fusion_model_1 import (
     get_sobel_filters,
     conv3x3
 )
+from .vlm_fusion.create_dino_sam_fusion_obj_size import (
+    KeepDinoShapeFusionBlock, 
+    DualBackboneKeepDino,
+    )

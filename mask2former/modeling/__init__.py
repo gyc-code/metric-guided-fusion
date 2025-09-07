@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 from .backbone.swin import D2SwinTransformer
 from .backbone.dino_v2_fb import DinoV2LargeBackbone, DinoV2BaseBackbone
+from .backbone.dino_v3_fb import DinoV3Backbone
 from .backbone.dino_v2_fb_adapter import DinoV2BaseAdapterBackbone #, DinoV2LargeAdapterBackbone
 from .backbone.dino_v2 import D2dinoV2
 from .backbone.sam_backbone.image_encoder import ImageEncoderViT

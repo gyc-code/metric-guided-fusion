@@ -147,5 +147,7 @@ def add_maskformer2_dual_backbone_config(cfg):
     cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO = 0.75
     # for fuse, type should be no_fuse, channel_replace, fuse_head, alpha_fuse
     cfg.FUSE_TYPE = "no_fuse"
+    # for alpha_fuse, the alpha value
+    cfg.FUSE_ALPHA = 0.5
 
 

@@ -59,10 +59,13 @@ def get_parser():
     parser.add_argument(
         "--config-file",
         # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_base_bs16_50ep.yaml",
+
         # default="configs/cityscapes/instance-segmentation/sam2/maskformer2_sam2.yaml",
         # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_large_bs16_50ep.yaml",
         # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
-        default="configs/cityscapes/instance-segmentation/vlm_fusion/maskformer2_dinov2_sam.yaml",
+        # default="configs/cityscapes/instance-segmentation/vlm_fusion/maskformer2_dinov2_sam.yaml",
+        default="configs/cityscapes/instance-segmentation/dinoV3/dinov3_vit7b16.yaml",
+
         metavar="FILE",
         help="path to config file",
     )
@@ -83,7 +86,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_feature/dino_sam_2_250809_0.5/',
+        default='visual_feature/dinov3_huge_plus_0.5/',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -98,8 +101,10 @@ def get_parser():
         help="Modify config options using the command-line 'KEY VALUE' pairs",
         # default=['MODEL.WEIGHTS','./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl'],
         # default=['MODEL.WEIGHTS','./output_vlm_link/facebook_version_test_dinov2/cs_fire_correct_90k_vitb_fb_512_1024/model_0089999.pth'],
-        # default=['MODEL.WEIGHTS',"./output_vlm_link/sam2/cs_freeze_180k_sam2_vit_huge_180k/model_0179999.pth"],
-        default=['MODEL.WEIGHTS',"./output_vlm_link/fuse/806_test1_alpha_edge_fuse_cs_dino_fire_sam2_freeze_180k_512_1024_bs3/model_0179999.pth"],
+        # default=['MODEL.WEIGHTS',"./output_vlm_link/sam2/cs_freeze_180k_sam2_vit_base+_180k/model_0179999.pth"],
+        # default=['MODEL.WEIGHTS',"./output_vlm_link/fuse/806_test1_alpha_edge_fuse_cs_dino_fire_sam2_freeze_180k_512_1024_bs3/model_0179999.pth"],
+        default=['MODEL.WEIGHTS',"./output_vlm_link/dinov3/cs_fire_vit_huge_plus_90k/model_final.pth"],
+        
         # default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output/instan_seg/mask2former_cs2cs/model_final.pth'],
         # default=['MODEL.WEIGHTS','/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth'],
         nargs=argparse.REMAINDER,
@@ -191,16 +196,16 @@ if __name__ == "__main__":
         # process_one(inputs[0], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name)
     
     if EVAL:
-        if 0:
+        if 1:
             # organise_evaluate_folder(result_save_folder)
             # organise_evaluate_folder(visul_save_folder)
             os.environ['CITYSCAPES_RESULTS'] = result_save_folder
             # os.environ['CITYSCAPES_RESULTS'] = 'visual_instance/category/category_urbansyn_1model_final.pth_instance_img'
-            # os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
-            os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling_urbansyn.py')
-        if 1:
+            os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling.py')
+            # os.system('python /home/yguo/Documents/cityscapesScripts/cityscapesscripts/evaluation/evalInstanceLevelSemanticLabeling_urbansyn.py')
+        if 0:
             # eval on kitti
             _temp_dir = result_save_folder
             evaluate_kitti(_temp_dir)
-        shutil.rmtree(result_save_folder)
+        # shutil.rmtree(result_save_folder)
         

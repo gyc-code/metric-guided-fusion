@@ -69,7 +69,9 @@ class ImageEncoder2(Backbone):
         # 1) 加载 checkpoint（直接拿它当 state_dict）
         
         if cfg.MODEL.BACKBONE.NAME == "ImageEncoder2":
-            model_weight_file = cfg.MODEL.WEIGHTS
+            # model_weight_file = cfg.MODEL.WEIGHTS
+            model_weight_file = "./pretrain/sam2.1_hiera_base_plus.pt"
+
         else:
             model_weight_file = cfg.MODEL.WEIGHTS_AUX
             
@@ -107,14 +109,14 @@ class ImageEncoder2(Backbone):
     def forward(self, sample: torch.Tensor):
         # Forward through backbone
         truck_output = self.trunk(sample)
-        # "for input 512*2014: 
-        # outputs[0].shape torch.Size([3, 144, 128, 256])
-        # outputs[1].shape torch.Size([3, 288, 64, 128])
-        # outputs[2].shape torch.Size([3, 576, 32, 64])
-        # outputs[3].shape torch.Size([3, 1152, 16, 32])
+        # "for input 1024*2014: 
+        # outputs[0].shape torch.Size([3, 112, 128, 256])
+        # outputs[1].shape torch.Size([3, 224, 64, 128])
+        # outputs[2].shape torch.Size([3, 448, 32, 64])
+        # outputs[3].shape torch.Size([3, 896, 16, 32])
 
         features, pos = self.neck(truck_output)
-        if self.scalp > 0:
+        if self.scalp > 0: #######  remove this, keep all feature
             # Discard the lowest resolution features
             features, pos = features[: -self.scalp], pos[: -self.scalp]
 
@@ -124,23 +126,21 @@ class ImageEncoder2(Backbone):
             "vision_pos_enc": pos,
             "backbone_fpn": features,
         }
-        # output is dict_keys(['vision_features'：torch.Size([3, 256, 32, 64]), 
-        # 'vision_pos_enc':
-        # features['vision_pos_enc'][0].shape torch.Size([3, 256, 128, 256]) 
-        # features['vision_pos_enc'][1].shape torch.Size([3, 256, 64, 128]) 
-        # features['vision_pos_enc'][2].shape torch.Size([3, 256, 32, 64]), 
-        # 'backbone_fpn':
-        # features['backbone_fpn'][0].shape torch.Size([3, 256, 128, 256]) 
-        # features['backbone_fpn'][1].shape torch.Size([3, 256, 64, 128])  
-        # features['backbone_fpn'][2].shape torch.Size([3, 256, 32, 64])])
         
         ###  change return for mask2former
         output = {
             "res2": features[0],
             "res3": features[1],
             "res4": features[2],
-            "res5": features[2],}
-        
+            "res5": features[2],
+        }
+        ####  try only trunk feature
+        # output = {
+        #     "res2": truck_output[0],
+        #     "res3": truck_output[1],
+        #     "res4": truck_output[2],
+        #     "res5": truck_output[3],
+        # }
         return output
 
 

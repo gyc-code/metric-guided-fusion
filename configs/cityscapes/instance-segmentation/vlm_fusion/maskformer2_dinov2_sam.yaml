@@ -2,7 +2,7 @@ _BASE_: ../maskformer2_R50_bs16_90k.yaml
 MODEL:
   META_ARCHITECTURE: "DualBackboneMaskFormer"
   BACKBONE:
-    NAME:  "DinoV2BaseBackbone"
+    NAME:  "DinoV3BaseBackbone"
   BACKBONE_AUX:
     # NAME: "ImageEncoderViT"
     NAME: "ImageEncoder2"
@@ -46,11 +46,10 @@ MODEL:
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
 SOLVER:
-  IMS_PER_BATCH: 3
+  IMS_PER_BATCH: 1
   CHECKPOINT_PERIOD: 180000
 TEST:
   EVAL_PERIOD: 10000
-
 INPUT:
   # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
   # MIN_SIZE_TRAIN_SAMPLING: "choice"
@@ -62,7 +61,8 @@ INPUT:
     TYPE: "absolute"
     SIZE:  (512, 1024)
 DATASETS:
-  TRAIN: ("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
-  TEST: ("cityscapes_fine_instance_seg_val",)
+  TRAIN: ("cityscapes_fine_instance_seg_train_experiment",) #("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
+  TEST: ("cityscapes_fine_instance_seg_val",) # ("cityscapes_fine_instance_seg_val",)
 
-FUSE_TYPE: "fuse_head" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,
+FUSE_TYPE: "obj_size_bias" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,obj_size_bias
+FUSE_ALPHA: 0.8

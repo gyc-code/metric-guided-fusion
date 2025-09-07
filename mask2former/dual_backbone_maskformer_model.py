@@ -26,12 +26,11 @@ from sklearn.decomposition import PCA
 from .vlm_fusion.create_fusion_model import SemanticEdgeFusion
 from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace, align_and_concat
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
-
-from hiera import Hiera
+from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 
 
 DEBUG = True  # Set to True to enable debug features like feature visualization
-SHOW = False  # Set to True to visualize and save feature comparisons    
+SHOW = True  # Set to True to visualize and save feature comparisons    
 
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
@@ -147,6 +146,7 @@ class DualBackboneMaskFormer(nn.Module):
         instance_on: bool,
         test_topk_per_image: int,
         fuse_type: str,
+        fuse_alpha: float = 0.5,
     ):
         """
         Args:
@@ -203,8 +203,10 @@ class DualBackboneMaskFormer(nn.Module):
             assert self.sem_seg_postprocess_before_inference
         ### fuse type
         self.fuse_type = fuse_type
+        if self.fuse_type == "alpha_fuse":
+            self.fuse_alpha = fuse_alpha
         if SHOW:
-            self.save_dir = "./debug_image/backbone_feature_fuse_model_804/"
+            self.save_dir = "./debug_image/backbone_feature_fuse_model_0825/"
             # Create the directory if it doesn't exist
             if os.path.exists(self.save_dir):
                 shutil.rmtree(self.save_dir)
@@ -295,6 +297,7 @@ class DualBackboneMaskFormer(nn.Module):
             "test_topk_per_image": cfg.TEST.DETECTIONS_PER_IMAGE,
             ##  fuse function
             "fuse_type": cfg.FUSE_TYPE,
+            "fuse_alpha": cfg.FUSE_ALPHA,
         }
 
     @property
@@ -435,14 +438,24 @@ class DualBackboneMaskFormer(nn.Module):
 
                 # 构建 ImageList
                 pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
-                features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
-
+                # features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
+                features_aux_list = self.backbone_aux.trunk(pad_images_4sam.tensor)
+                features_aux = {'res2': features_aux_list[0],
+                                'res3': features_aux_list[1],
+                                'res4': features_aux_list[2],
+                                'res5': features_aux_list[3],
+                                }
                 for k in features_aux.keys():
                     feature_height = int(features_aux[k].shape[2] / 2)
                     features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
 
             else:
-                features_aux = self.backbone_aux(images.tensor)
+                features_aux_list = self.backbone_aux.trunk(images.tensor)
+                features_aux = {'res2': features_aux_list[0],
+                                'res3': features_aux_list[1],
+                                'res4': features_aux_list[2],
+                                'res5': features_aux_list[3],
+                                }
                 # #### crop image to be two parts for test, when input is 1024*2048
                 # left_images = []
                 # right_images = []
@@ -482,17 +495,42 @@ class DualBackboneMaskFormer(nn.Module):
             if self.fuse_type == "alpha_fuse":
                 # test 1   F_dino + self.alpha * F_fuse
                 if self.training:
-                    fusion_model = MultiStageFusion().cuda().half()
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda().half()
                 else:
-                    fusion_model = MultiStageFusion().cuda()
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda()
                 features = fusion_model(features_main, features_aux)
+
+            elif self.fuse_type == "alpha_stage_fuse":
+                # test 1   F_dino + self.alpha * F_fuse
+                if self.training:
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda().half()
+                else:
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda()
+                features = fusion_model(features_main, features_aux)
+
             elif self.fuse_type == "channel_replace":
                 # test 2  Replace selected keys in dino_feats with aligned sam_feats.
                 features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
                 
             elif self.fuse_type == "channel_concat":
                 features = align_and_concat(features_main, features_aux)
+
+            elif self.fuse_type == "obj_size_bias":
                 
+                if self.training:
+                    # test 5  DualBackboneKeepDino
+                    
+                    model = DualBackboneKeepDino(
+                        dino_channels={'res2':128,'res3':256,'res4':512,'res5':1024},
+                        sam_channels={'res2':112,'res3':224,'res4':448,'res5':896},
+                    ).to(device).half()
+                else:
+                    model = DualBackboneKeepDino(
+                        dino_channels={'res2':128,'res3':256,'res4':512,'res5':1024},
+                        sam_channels={'res2':112,'res3':224,'res4':448,'res5':896},
+                    ).to(device)
+                features, aux = model(features_main, features_aux)
+
             elif self.fuse_type == "fuse_head":
                 ###### test 3
                 sam_channel = features_aux['res2'].shape[1]
@@ -505,6 +543,14 @@ class DualBackboneMaskFormer(nn.Module):
             elif self.fuse_type == "edge_fusion":
                 model  = SemanticEdgeFusion().to(device)
                 features = model(features_main, features_aux)
+            elif self.fuse_type == "Residual_Soft_Injection":
+                # Residual Soft Injection
+                if self.training:
+                    injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda().half()
+                else:
+                    injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda()
+                features = injection_model(features_main, features_aux)
+            
             elif self.fuse_type == "no_fuse":
                 # test 4  No fusion, use main features only
                 features = features_main

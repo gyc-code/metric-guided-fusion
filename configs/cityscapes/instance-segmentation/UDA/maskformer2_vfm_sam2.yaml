@@ -1,7 +1,7 @@
 _BASE_: ../maskformer2_R50_bs16_90k.yaml
 MODEL:
   BACKBONE:
-    NAME: "ImageEncoder2"  #"ImageEncoder2"
+    NAME: "ImageEncoder2"
   MASK_FORMER:
     FROZE_BACKBONE: False
   SWIN:
@@ -13,10 +13,7 @@ MODEL:
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
-  # WEIGHTS: "./pretrain/sam2.1_hiera_large.pt"
-  WEIGHTS: "./pretrain/sam2.1_hiera_base_plus.pt"
-  ####  debug
-  # WEIGHTS:  "./output_vlm_link/sam2/cs_freeze_180k_sam2_vit_huge_180k/model_0179999.pth"
+  WEIGHTS: "./output_vlm_link/coco_data/coco_fire_sam2/model_0368749.pth"
 
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
@@ -24,8 +21,7 @@ SOLVER:
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 180000
 TEST:
-  EVAL_PERIOD: 10
-
+  EVAL_PERIOD: 10000
 
 INPUT:
   MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(10, 21)]"] #(5, 21)
@@ -38,8 +34,9 @@ INPUT:
     TYPE: "absolute"
     SIZE:  (1024, 1024)
 
-
+##  for debug
 DATASETS:
-  ####  debug
-  TRAIN: ("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)
+  TRAIN: ("urbansyn_instance_seg_train_eval_cityscapes",)  #("cityscapes_fine_instance_seg_train",)
   TEST: ("cityscapes_fine_instance_seg_val",)
+
+ViT_USE_ADAPTER: False
