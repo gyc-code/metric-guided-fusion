@@ -170,11 +170,14 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         if comm.get_rank() > 0:
             return
         import cityscapesscripts.evaluation.evalInstanceLevelSemanticLabeling as cityscapes_eval
-        self._logger.info("Evaluating results under {} ...".format(self._working_dir))
+
+        # self._working_dir = "/home/yguo/Documents/other/UDA4Inst/output_vlm_link/dinov3/cs_freeze_dinov3_vit_base_180k"
 
         # set some global states in cityscapes evaluation API, before evaluating
         # cityscapes_eval.args.predictionPath = os.path.abspath(os.path.join(self._working_dir, "predictions"))
         cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result")
+        self._logger.info("Evaluating results under {} ...".format(cityscapes_eval.args.predictionPath))
+
 
         cityscapes_eval.args.predictionWalk = None
         cityscapes_eval.args.JSONOutput = False
@@ -193,16 +196,16 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
         predictionImgList = []
         for gt in groundTruthImgList:
             predictionImgList.append(cityscapes_eval.getPrediction(gt, cityscapes_eval.args))
-        # try:
-        results = cityscapes_eval.evaluateImgLists(predictionImgList, groundTruthImgList, cityscapes_eval.args)["averages"]
-        ret = OrderedDict()
-        ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-        shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
-        self._logger.info(ret)
-        return ret
-        # except:
-        #     print('------------ error happen in eval')
-        #     return None
+        try:
+            results = cityscapes_eval.evaluateImgLists(predictionImgList, groundTruthImgList, cityscapes_eval.args)["averages"]
+            ret = OrderedDict()
+            ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+            # shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
+            self._logger.info(results)
+            return ret
+        except:
+            print('------------ error happen in eval')
+            return None
 
 
 class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
