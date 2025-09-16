@@ -69,6 +69,7 @@ class DetectionCheckpointer(Checkpointer):
         return ret
 
     def _load_file(self, filename):
+        print('-------------------- load ckpt in yaml --------------')
         if filename.endswith(".pkl"):
             with PathManager.open(filename, "rb") as f:
                 data = pickle.load(f, encoding="latin1")

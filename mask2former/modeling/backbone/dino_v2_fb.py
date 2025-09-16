@@ -17,6 +17,7 @@ class DinoV2BaseBackbone(Backbone):
     def __init__(self, cfg, input_shape):
         super().__init__()
         self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').train()
+        print('~~~~~~~~~~~~~~load pretrain~~~~~~~~')
         del self.model.mask_token
         self.qkv_out = None
         self.token_size = 14

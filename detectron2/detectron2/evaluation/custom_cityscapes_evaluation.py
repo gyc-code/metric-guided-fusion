@@ -200,7 +200,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
             results = cityscapes_eval.evaluateImgLists(predictionImgList, groundTruthImgList, cityscapes_eval.args)["averages"]
             ret = OrderedDict()
             ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            # shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
+            shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
             self._logger.info(results)
             return ret
         except:

@@ -226,7 +226,7 @@ class ImprovedFusion(nn.Module):
         threshold = edge_mean + 1.0 * edge_std
 
         # threshold = edge.mean().detach()
-        edge_mask = (edge > threshold).float()
+        edge_mask = (edge > threshold).float() ### todo :check the channel for edge_mask
 
         # 直接作为mask融合
         F_dino_enhanced = F_dino + self.alpha * edge_mask * F_dino.amax(dim=(2,3), keepdim=True)
@@ -304,7 +304,26 @@ def align_and_replace(dino_feats: dict, sam_feats: dict,
     #  for sam2
     if mapping is None:
         mapping = {'res2': 'res2', 'res4': 'res4'}
-        
+    
+    elif mapping == "A":
+        mapping = {'res2': 'res2'}
+    elif mapping == "B":
+        mapping = {'res3': 'res3'}
+    elif mapping == "C":
+        mapping = {'res2': 'res2', 'res3': 'res3'}
+    elif mapping == "D":
+        mapping = {'res4': 'res4'}
+    elif mapping == "E":
+        mapping = {'res5': 'res5'}
+    elif mapping == "F":
+        mapping = {'res2': 'res2', 'res4': 'res4'}
+    elif mapping == "G":
+        mapping = {'res4': 'res4', 'res5': 'res5'}
+    elif mapping == "H":
+        mapping = {'res2': 'res2', 'res5': 'res5'}        
+    elif mapping == "K":
+        mapping = {'res3': 'res3', 'res4': 'res4', 'res5': 'res5'}      
+
     for sam_key, dino_key in mapping.items():
         src = sam_feats.get(sam_key)
         tgt = out_feats.get(dino_key)
@@ -338,7 +357,6 @@ def align_and_concat(dino_feats: dict, sam_feats: dict,
             continue
         if src.shape[-2:] != tgt.shape[-2:]:
             src = F.interpolate(src, size=tgt.shape[-2:], mode='bilinear', align_corners=False)
-            
         original_C = tgt.shape[1]
         half_C = original_C // 2  # 通道减半
 

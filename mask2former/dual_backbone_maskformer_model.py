@@ -29,8 +29,8 @@ from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 
 
-DEBUG = True  # Set to True to enable debug features like feature visualization
-SHOW = True  # Set to True to visualize and save feature comparisons    
+DEBUG = False  # Set to True to enable debug features like feature visualization
+SHOW = False  # Set to True to visualize and save feature comparisons    
 
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
@@ -147,6 +147,7 @@ class DualBackboneMaskFormer(nn.Module):
         test_topk_per_image: int,
         fuse_type: str,
         fuse_alpha: float = 0.5,
+        mapping = None,
     ):
         """
         Args:
@@ -205,6 +206,8 @@ class DualBackboneMaskFormer(nn.Module):
         self.fuse_type = fuse_type
         if self.fuse_type == "alpha_fuse":
             self.fuse_alpha = fuse_alpha
+        self.mapping = mapping
+        print("mapping:", mapping)
         if SHOW:
             self.save_dir = "./debug_image/backbone_feature_fuse_model_0825/"
             # Create the directory if it doesn't exist
@@ -298,6 +301,7 @@ class DualBackboneMaskFormer(nn.Module):
             ##  fuse function
             "fuse_type": cfg.FUSE_TYPE,
             "fuse_alpha": cfg.FUSE_ALPHA,
+            "mapping": cfg.MAPPING,
         }
 
     @property
@@ -424,66 +428,68 @@ class DualBackboneMaskFormer(nn.Module):
             features_main = self.backbone(images.tensor)
             # for k in features_main.keys():
             #     print(f"feature_main[{k}].shape: {features_main[k].shape}") 
-            
-            if self.training:
-                #### pad for sam when input size is 512*1024
-                padded_images = []
-                for img in images:
-                    # img: Tensor[C, H, W], 这里 H=512, W=1024
-                    C, H, W = img.shape
-                    assert H == 512 and W == 1024, "for training, input size 3*512*1024"
-                    # 在高度维度上重复两遍
-                    img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
-                    padded_images.append(img_tiled)
-
-                # 构建 ImageList
-                pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
-                # features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
-                features_aux_list = self.backbone_aux.trunk(pad_images_4sam.tensor)
-                features_aux = {'res2': features_aux_list[0],
-                                'res3': features_aux_list[1],
-                                'res4': features_aux_list[2],
-                                'res5': features_aux_list[3],
-                                }
-                for k in features_aux.keys():
-                    feature_height = int(features_aux[k].shape[2] / 2)
-                    features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
-
+            if self.fuse_type == "no_fuse":
+                pass
             else:
-                features_aux_list = self.backbone_aux.trunk(images.tensor)
-                features_aux = {'res2': features_aux_list[0],
-                                'res3': features_aux_list[1],
-                                'res4': features_aux_list[2],
-                                'res5': features_aux_list[3],
-                                }
-                # #### crop image to be two parts for test, when input is 1024*2048
-                # left_images = []
-                # right_images = []
-                # # mid_images = []
-                # for img in images:
-                #     # img: Tensor[C, H, W], 这里 H=1024, W=2048
-                #     C, H, W = img.shape
-                #     assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
-                #     left_images.append(img[:, :, :1024])
-                #     right_images.append(img[:, :, 1024:])
-                #     # mid_images.append(img[:, :, 512:1536]) 
+                if self.training:
+                    #### pad for sam when input size is 512*1024
+                    padded_images = [] ############# todo :  TO BE REMOVED AFTER COMPARED 
+                    for img in images:
+                        # img: Tensor[C, H, W], 这里 H=512, W=1024
+                        C, H, W = img.shape
+                        assert H == 512 and W == 1024, "for training, input size 3*512*1024"
+                        # 在高度维度上重复两遍
+                        img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
+                        padded_images.append(img_tiled)
 
-                # # 构建 ImageList
-                # left_images = ImageList.from_tensors(left_images, self.size_divisibility)
-                # features_left = self.backbone_aux(left_images.tensor)  # cindy add auxiliary backbone
-                # right_images = ImageList.from_tensors(right_images, self.size_divisibility)
-                # features_right = self.backbone_aux(right_images.tensor)  # cindy add auxiliary backbone
-                # # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
-                # # features_mid = self.backbone_aux(mid_images.tensor)  # cindy add auxiliary backbone
+                    # 构建 ImageList
+                    pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
+                    # features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
+                    features_aux_list = self.backbone_aux.trunk(pad_images_4sam.tensor)
+                    features_aux = {'res2': features_aux_list[0],
+                                    'res3': features_aux_list[1],
+                                    'res4': features_aux_list[2],
+                                    'res5': features_aux_list[3],
+                                    }
+                    for k in features_aux.keys():
+                        feature_height = int(features_aux[k].shape[2] / 2)
+                        features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
 
-                # features_aux = {}
-                # for k in features_left.keys():
-                #     # Concatenate left and right features along the channel dimension
-                #     features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
-                #     # feature_width = features_aux[k].shape[3]
-                #     # replace_band = int(feature_width / 8)
-                #     # features_aux[k] = features_aux[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]
-                #     # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
+                else:
+                    features_aux_list = self.backbone_aux.trunk(images.tensor)
+                    features_aux = {'res2': features_aux_list[0],
+                                    'res3': features_aux_list[1],
+                                    'res4': features_aux_list[2],
+                                    'res5': features_aux_list[3],
+                                    }
+                    # #### crop image to be two parts for test, when input is 1024*2048
+                    # left_images = []
+                    # right_images = []
+                    # # mid_images = []
+                    # for img in images:
+                    #     # img: Tensor[C, H, W], 这里 H=1024, W=2048
+                    #     C, H, W = img.shape
+                    #     assert H == 1024 and W == 2048, "for testing, input size 3*1024*2048"
+                    #     left_images.append(img[:, :, :1024])
+                    #     right_images.append(img[:, :, 1024:])
+                    #     # mid_images.append(img[:, :, 512:1536]) 
+
+                    # # 构建 ImageList
+                    # left_images = ImageList.from_tensors(left_images, self.size_divisibility)
+                    # features_left = self.backbone_aux(left_images.tensor)  # cindy add auxiliary backbone
+                    # right_images = ImageList.from_tensors(right_images, self.size_divisibility)
+                    # features_right = self.backbone_aux(right_images.tensor)  # cindy add auxiliary backbone
+                    # # mid_images = ImageList.from_tensors(mid_images, self.size_divisibility)
+                    # # features_mid = self.backbone_aux(mid_images.tensor)  # cindy add auxiliary backbone
+
+                    # features_aux = {}
+                    # for k in features_left.keys():
+                    #     # Concatenate left and right features along the channel dimension
+                    #     features_aux[k] = torch.cat((features_left[k], features_right[k]), dim=3)
+                    #     # feature_width = features_aux[k].shape[3]
+                    #     # replace_band = int(feature_width / 8)
+                    #     # features_aux[k] = features_aux[k][:, :, :, int(feature_width / 2) - replace_band:int(feature_width / 2) + replace_band]
+                    #     # print(f"features_aux[{k}].shape: {features_aux[k].shape}")  # Debugging output
 
             if DEBUG:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
@@ -500,17 +506,9 @@ class DualBackboneMaskFormer(nn.Module):
                     fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda()
                 features = fusion_model(features_main, features_aux)
 
-            elif self.fuse_type == "alpha_stage_fuse":
-                # test 1   F_dino + self.alpha * F_fuse
-                if self.training:
-                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda().half()
-                else:
-                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda()
-                features = fusion_model(features_main, features_aux)
-
             elif self.fuse_type == "channel_replace":
                 # test 2  Replace selected keys in dino_feats with aligned sam_feats.
-                features = align_and_replace(features_main, features_aux)  # cindy add, use main features for now
+                features = align_and_replace(features_main, features_aux, self.mapping)  # cindy add, use main features for now
                 
             elif self.fuse_type == "channel_concat":
                 features = align_and_concat(features_main, features_aux)
@@ -518,8 +516,6 @@ class DualBackboneMaskFormer(nn.Module):
             elif self.fuse_type == "obj_size_bias":
                 
                 if self.training:
-                    # test 5  DualBackboneKeepDino
-                    
                     model = DualBackboneKeepDino(
                         dino_channels={'res2':128,'res3':256,'res4':512,'res5':1024},
                         sam_channels={'res2':112,'res3':224,'res4':448,'res5':896},
