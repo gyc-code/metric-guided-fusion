@@ -16,20 +16,10 @@ from detectron2.modeling import BACKBONE_REGISTRY, Backbone, ShapeSpec
 class DinoV3Backbone(Backbone):
     def __init__(self, cfg, input_shape):
         super().__init__()
-        # 1) 你的本地 DINOv3 仓库路径（确保里面有 hubconf.py）
         REPO_DIR = "/home/yguo/Documents/other/dinov3"
-        # 2) 你下载好的权重路径（举例 vit7b16）
-        # ckpt = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth"
-        # ckpt = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth"
-        # ckpt = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth"
-        # ckpt = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth"
-        # emb_dim = 1280  #4096-7B, 1536-giant2, 1280-huge2,  1024-L, 768-base
-
         ckpt = cfg.MODEL.WEIGHTS_BACKBONE
         emb_dim = cfg.MODEL.BACKBONE_EMB_DIM
-        # model_name = 'dinov3_vit7b16'
         model_name = cfg.MODEL.WEIGHTS_BACKBONE_NAME #'dinov3_vith16plus'
-
         self.half_flag = True if model_name is 'dinov3_vit7b16' else False
         self.model = torch.hub.load(
             REPO_DIR,
@@ -44,8 +34,7 @@ class DinoV3Backbone(Backbone):
         print("missing:", len(msg.missing_keys), "unexpected:", len(msg.unexpected_keys))
         ##########
 
-        self.model.train()
-        # self.model = torch.hub.load(REPO_DIR, 'dinov3_vit7b16', source='local', weights=dinov3_vith16plus).train()
+        # self.model.train()
         self.qkv_out = None
         self.token_size = 16
         self.factors = {
@@ -55,9 +44,7 @@ class DinoV3Backbone(Backbone):
             'res5': 32,
         }
         self.base=128
-        # self.w, self.h = input_shape
         self._out_features = cfg.MODEL.SWIN.OUT_FEATURES
-        # self.model.blocks[11].attn.qkv.register_forward_hook(self.extract_hook())
 
         self.convs = nn.ModuleList([nn.Conv2d(emb_dim, self.base*fact//4, kernel_size=1) for fact in self.factors.values()])
         

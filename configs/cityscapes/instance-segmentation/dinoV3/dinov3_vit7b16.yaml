@@ -19,7 +19,7 @@ MODEL:
   # WEIGHTS_BACKBONE_NAME: dinov3_vith16plus
 
 
-  WEIGHTS_BACKBONE: "/home/yguo/Documents/other/UDA4Inst/output_vlm_link/dinov3/cs_freeze_dinov3_vit_base_180k/model_0179999.pth"
+  WEIGHTS_BACKBONE: "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth" #"/home/yguo/Documents/other/UDA4Inst/output_vlm_link/dinov3/cs_freeze_dinov3_vit_base_180k/model_0179999.pth" #dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
   BACKBONE_EMB_DIM: 768
   WEIGHTS_BACKBONE_NAME: dinov3_vitb16
 

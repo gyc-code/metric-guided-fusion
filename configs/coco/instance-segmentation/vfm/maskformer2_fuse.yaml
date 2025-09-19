@@ -1,8 +1,8 @@
-_BASE_: ../maskformer2_R50_bs16_90k.yaml
+_BASE_: ../maskformer2_R50_bs16_50ep.yaml
 MODEL:
   META_ARCHITECTURE: "DualBackboneMaskFormer"
   BACKBONE:
-    NAME:  "DinoV2BaseBackbone"  #"DinoV3Backbone"
+    NAME:  "DinoV3Backbone" #"DinoV2BaseBackbone"
   BACKBONE_AUX:
     # NAME: "ImageEncoderViT"
     NAME: "ImageEncoder2"
@@ -10,30 +10,28 @@ MODEL:
   BACKBONE_BENCH:
     NAME: "D2SwinTransformer"
   MASK_FORMER:
-    FROZE_BACKBONE: False
+    FROZE_BACKBONE: True
     FROZE_AUX_BACKBONE: True
     FROZE_BENCH_BACKBONE: True
   SWIN: 
-    #### dinov2 fb version
-    EMBED_DIM: 128
-    NUM_HEADS: [4, 8, 16, 32]
-    #### dinov2 fb version
+      #### dinov2 fb version
+      EMBED_DIM: 128
+      NUM_HEADS: [4, 8, 16, 32]
+      #### dinov2 fb version
 
-    ### swin L version open if need bench weight
-    # EMBED_DIM: 192
-    # NUM_HEADS: [6, 12, 24, 48]
-    ### swin L version
-
-    DEPTHS: [2, 2, 18, 2]
-    WINDOW_SIZE: 12
-    APE: False
-    DROP_PATH_RATE: 0.3
-    PATCH_NORM: True
-    PRETRAIN_IMG_SIZE: 384
+      ### swin L version open if need bench weight
+      # EMBED_DIM: 192
+      # NUM_HEADS: [6, 12, 24, 48]
+      ### swin L version
+      DEPTHS: [2, 2, 18, 2]
+      WINDOW_SIZE: 12
+      APE: False
+      DROP_PATH_RATE: 0.3
+      PATCH_NORM: True
+      PRETRAIN_IMG_SIZE: 384
 
   # WEIGHTS: "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
   WEIGHTS: ""
-
   WEIGHTS_AUX: "./pretrain/sam2.1_hiera_base_plus.pt" #"./pretrain/sam2.1_hiera_large.pt"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_l_0b3195.pth"
   # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
@@ -47,30 +45,29 @@ MODEL:
   BACKBONE_EMB_DIM: 768
   WEIGHTS_BACKBONE_NAME: dinov3_vitb16
 
-
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
-SOLVER:
-  IMS_PER_BATCH: 3
-  CHECKPOINT_PERIOD: 180000
-  MAX_ITER: 180000
-
-TEST:
-  EVAL_PERIOD: 20000
+  MASK_FORMER:
+    NUM_OBJECT_QUERIES: 200
 
 INPUT:
-  # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
-  # MIN_SIZE_TRAIN_SAMPLING: "choice"
-  # MIN_SIZE_TEST: 1024
-  # MAX_SIZE_TRAIN: 2048 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096
-  # MAX_SIZE_TEST: 2048
+  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
+  MIN_SIZE_TRAIN_SAMPLING: "choice"
+  MIN_SIZE_TEST: 1024
+  MAX_SIZE_TRAIN: 2048 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096
+  MAX_SIZE_TEST: 2048
   CROP:
     ENABLED: True
     TYPE: "absolute"
     SIZE:  (512, 1024)
-DATASETS:
-  TRAIN: ("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",) #("cityscapes_fine_instance_seg_train_small",) #("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #
-  TEST: ("cityscapes_fine_instance_seg_val",) # ("cityscapes_fine_instance_seg_val",)
+
+SOLVER:
+  STEPS: (327778, 355092)
+  MAX_ITER: 368750
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 368750
+TEST:
+  EVAL_PERIOD: 36875
 
 FUSE_TYPE: "channel_replace" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,obj_size_bias
 FUSE_ALPHA: 0.8

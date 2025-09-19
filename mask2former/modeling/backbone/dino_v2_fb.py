@@ -16,7 +16,8 @@ from detectron2.modeling import BACKBONE_REGISTRY, Backbone, ShapeSpec
 class DinoV2BaseBackbone(Backbone):
     def __init__(self, cfg, input_shape):
         super().__init__()
-        self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').train()
+        # self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').train()
+        self.model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
         print('~~~~~~~~~~~~~~load pretrain~~~~~~~~')
         del self.model.mask_token
         self.qkv_out = None
@@ -28,9 +29,7 @@ class DinoV2BaseBackbone(Backbone):
             'res5': 32,
         }
         self.base=128
-        # self.w, self.h = input_shape
         self._out_features = cfg.MODEL.SWIN.OUT_FEATURES
-        # self.model.blocks[11].attn.qkv.register_forward_hook(self.extract_hook())
 
         self.convs = nn.ModuleList([nn.Conv2d(768, self.base*fact//4, kernel_size=1) for fact in self.factors.values()])
         
@@ -46,12 +45,6 @@ class DinoV2BaseBackbone(Backbone):
             "res4": 512,
             "res5": 1024,
         }
-
-
-    # def extract_hook(self):
-    #     def hook(module, input, output):
-    #         self.qkv_out = output
-    #     return hook
 
     def get_divisible_size(self, w, h):
         return w + (14 - w%14), h+ (14 - h%14)
@@ -106,9 +99,7 @@ class DinoV2LargeBackbone(Backbone):
             'res5': 32,
         }
         self.base=128
-        # self.w, self.h = input_shape
         self._out_features = cfg.MODEL.SWIN.OUT_FEATURES
-        # self.model.blocks[11].attn.qkv.register_forward_hook(self.extract_hook())
         self.feature_size = 1024
         self.convs = nn.ModuleList([nn.Conv2d(self.feature_size, self.base*fact//4, kernel_size=1) for fact in self.factors.values()])
         
@@ -124,10 +115,6 @@ class DinoV2LargeBackbone(Backbone):
             "res4": 512,
             "res5": 1024,
         }
-    # def extract_hook(self):
-    #     def hook(module, input, output):
-    #         self.qkv_out = output
-    #     return hook
 
     def get_divisible_size(self, w, h):
         return w + (14 - w%14), h+ (14 - h%14)
