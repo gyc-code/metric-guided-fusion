@@ -27,10 +27,33 @@ from .vlm_fusion.create_fusion_model import SemanticEdgeFusion
 from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace, align_and_concat
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
+from mask2former.vfm_diagnostics import compute_metrics_from_features
 
 
-DEBUG = False  # Set to True to enable debug features like feature visualization
-SHOW = False  # Set to True to visualize and save feature comparisons    
+DEBUG = True  # Set to True to enable debug features like feature visualization
+SHOW = True  # Set to True to visualize and save feature comparisons    
+COMPUTER_COMPLEXITY = False
+DIAGNOSTICS = True  # Set to True to compute and print feature statistics
+
+
+if COMPUTER_COMPLEXITY:
+    from fvcore.nn import FlopCountAnalysis
+
+
+def _count_params(module):
+    total = sum(p.numel() for p in module.parameters())
+    trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+    return {"total": int(total), "trainable": int(trainable)}
+
+def _humanize(num: float, unit: str = "") -> str:
+    # 例如 3.21 GFLOPs / 86.5 M params
+    for u in ["", "K", "M", "B", "T"]:
+        if abs(num) < 1000:
+            return f"{num:.2f} {u}{unit}".strip()
+        num /= 1000
+    return f"{num:.2f} P{unit}".strip()
+
+
 
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
@@ -212,7 +235,7 @@ class DualBackboneMaskFormer(nn.Module):
         self.mapping = mapping
         print("mapping:", mapping)
         if SHOW:
-            self.save_dir = "./debug_image/backbone_feature_fuse_model_0917/"
+            self.save_dir = "./debug_image/backbone_feature_fuse_model_0929/"
             # Create the directory if it doesn't exist
             if os.path.exists(self.save_dir):
                 shutil.rmtree(self.save_dir)
@@ -323,6 +346,49 @@ class DualBackboneMaskFormer(nn.Module):
         img_np = np.clip(img_np, 0, 255).astype(np.uint8).transpose(1, 2, 0)
         return img_np
 
+
+    @torch.no_grad()
+    def compute_complexity(self, batched_inputs, target: bool = False):
+        """
+        独立的复杂度评估接口（不参与梯度），返回 per-batch 与 per-image 的 FLOPs 与参数量。
+        """
+        # 参数量（不会触发前向）
+        params = _count_params(self)
+
+        # FLOPs（会触发一次前向）
+        flops_total = None
+        flops_per_image = None
+
+        if 0: # FlopCountAnalysis is not None:
+            was_training = self.training
+            self.eval()
+            try:
+                # 只传 forward 的前两个位置参数 (batched_inputs, target)
+                flops_total = int(FlopCountAnalysis(self, (batched_inputs, target)).total())
+                bs = len(batched_inputs)
+                flops_per_image = int(flops_total / max(bs, 1))
+            finally:
+                if was_training:
+                    self.train()
+        else:
+            # 可选：给一个提示
+            pass
+
+        return {
+            "params": params,  # {"total": int, "trainable": int}
+            # "flops": {
+            #     "total": flops_total,         # 整个 batch 的 FLOPs（单位：次运算）
+            #     "per_image": flops_per_image  # 单图平均 FLOPs
+            # },
+            "readable": {
+                "params_total": _humanize(params["total"], " params"),
+                "params_trainable": _humanize(params["trainable"], " params"),
+                # "flops_total": _humanize(flops_total or 0, "FLOPs"),
+                # "flops_per_image": _humanize(flops_per_image or 0, "FLOPs"),
+            }
+        }
+
+
     def forward(self, batched_inputs, target=False):
         """
         Args:
@@ -349,6 +415,9 @@ class DualBackboneMaskFormer(nn.Module):
                     segments_info (list[dict]): Describe each segment in `panoptic_seg`.
                         Each dict contains keys "id", "category_id", "isthing".
         """
+        if COMPUTER_COMPLEXITY:
+            profile = self.compute_complexity(batched_inputs, target=target)
+        
         if 'source' in batched_inputs[0]:
             if target:
                 images = [x['target']["image"].to(self.device) for x in batched_inputs]
@@ -434,38 +503,44 @@ class DualBackboneMaskFormer(nn.Module):
             if self.fuse_type == "no_fuse":
                 pass
             else:
-                # if self.training:
-                #     #### pad for sam when input size is 512*1024
-                #     padded_images = [] ############# todo :  TO BE REMOVED AFTER COMPARED 
-                #     for img in images:
-                #         # img: Tensor[C, H, W], 这里 H=512, W=1024
-                #         C, H, W = img.shape
-                #         assert H == 512 and W == 1024, "for training, input size 3*512*1024"
-                #         # 在高度维度上重复两遍
-                #         img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
-                #         padded_images.append(img_tiled)
+                if self.training:
+                    #### pad for sam when input size is 512*1024
+                    padded_images = [] ############# todo :  TO BE REMOVED AFTER COMPARED 
+                    for img in images:
+                        # img: Tensor[C, H, W], 这里 H=512, W=1024
+                        C, H, W = img.shape
+                        assert H == 512 and W == 1024, "for training, input size 3*512*1024"
+                        # 在高度维度上重复两遍
+                        img_tiled = torch.cat([img, img], dim=1)  # -> [C, 1024, 1024]
+                        padded_images.append(img_tiled)
 
-                #     # 构建 ImageList
-                #     pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
-                #     # features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
-                #     features_aux_list = self.backbone_aux.trunk(pad_images_4sam.tensor)
-                #     features_aux = {'res2': features_aux_list[0],
-                #                     'res3': features_aux_list[1],
-                #                     'res4': features_aux_list[2],
-                #                     'res5': features_aux_list[3],
-                #                     }
-                #     for k in features_aux.keys():
-                #         feature_height = int(features_aux[k].shape[2] / 2)
-                #         features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
+                    # 构建 ImageList
+                    pad_images_4sam = ImageList.from_tensors(padded_images, self.size_divisibility)
+                    # features_aux = self.backbone_aux(pad_images_4sam.tensor)  # cindy add auxiliary backbone
+                    if self.backbone_aux._get_name() == "ImageEncoder2":
+                        features_aux_list = self.backbone_aux.trunk(pad_images_4sam.tensor)
+                        features_aux = {'res2': features_aux_list[0],
+                                        'res3': features_aux_list[1],
+                                        'res4': features_aux_list[2],
+                                        'res5': features_aux_list[3],
+                                        }
+                    else:
+                        features_aux = self.backbone_aux(pad_images_4sam.tensor)
+    
+                    for k in features_aux.keys():
+                        feature_height = int(features_aux[k].shape[2] / 2)
+                        features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
 
-                # else:
-                features_aux_list = self.backbone_aux.trunk(images.tensor)
-                features_aux = {'res2': features_aux_list[0],
-                                'res3': features_aux_list[1],
-                                'res4': features_aux_list[2],
-                                'res5': features_aux_list[3],
-                                }
-
+                else:
+                    if self.backbone_aux._get_name() == "ImageEncoder2":
+                        features_aux_list = self.backbone_aux.trunk(images.tensor)
+                        features_aux = {'res2': features_aux_list[0],
+                                        'res3': features_aux_list[1],
+                                        'res4': features_aux_list[2],
+                                        'res5': features_aux_list[3],
+                                        }                    
+                    else:
+                        features_aux = self.backbone_aux(images.tensor)
 
             if DEBUG:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
@@ -513,13 +588,13 @@ class DualBackboneMaskFormer(nn.Module):
             elif self.fuse_type == "edge_fusion":
                 model  = SemanticEdgeFusion().to(device)
                 features = model(features_main, features_aux)
-            elif self.fuse_type == "Residual_Soft_Injection":
-                # Residual Soft Injection
-                if self.training:
-                    injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda().half()
-                else:
-                    injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda()
-                features = injection_model(features_main, features_aux)
+            # elif self.fuse_type == "Residual_Soft_Injection":
+            #     # Residual Soft Injection
+            #     if self.training:
+            #         injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda().half()
+            #     else:
+            #         injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda()
+            #     features = injection_model(features_main, features_aux)
             
             elif self.fuse_type == "no_fuse":
                 # test 4  No fusion, use main features only
@@ -534,8 +609,29 @@ class DualBackboneMaskFormer(nn.Module):
                                                         img_np, self.save_dir, img_id, 
                                                         n_components=3)
 
-            outputs = self.sem_seg_head(features)
+            if DIAGNOSTICS:
+                print("------- dinov2 backbone -------")
+                mflat = compute_metrics_from_features(features_main['res2'])
+                print("dinov2 res2 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_main['res3'])
+                print("dinov2 res3 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_main['res4'])
+                print("dinov2 res4 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_main['res5'])
+                print("dinov2 res5 backbone:", {k: v.tolist() for k, v in mflat.items()})
 
+                print("------- sam  -------")                
+                mflat = compute_metrics_from_features(features_aux['res2'])
+                print("sam   res2 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_aux['res3'])
+                print("sam   res3 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_aux['res4'])
+                print("sam   res4 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                mflat = compute_metrics_from_features(features_aux['res5'])
+                print("sam   res5 backbone:", {k: v.tolist() for k, v in mflat.items()})
+
+            outputs = self.sem_seg_head(features)
+                    
             if self.training:
                 # mask classification target
                 if "instances" in batched_inputs[0]:

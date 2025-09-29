@@ -742,7 +742,7 @@ class D2SwinTransformer(SwinTransformer, Backbone):
         }
 
         # -------------------------------------------------
-        if 1:
+        if 0:
             model_weight_file = cfg.MODEL.WEIGHTS_BENCH
             if model_weight_file:
                 checkpointer = DetectionCheckpointer(self, save_dir=None)

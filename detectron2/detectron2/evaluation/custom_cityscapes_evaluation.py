@@ -23,8 +23,6 @@ def process_train_id_to_color_img(img_train_id, dataset='cityscapes'):
     img_train_id = img_train_id.reshape(1, h, w)
     img_train_id = np.repeat(img_train_id, 3, axis=0)
     rgb_masks_final = decode_seg_map_sequence(img_train_id, dataset)
-    # rgb_masks_final = decode_seg_map_sequence(img_train_id, dataset)
-
     rgb_masks_np_final = rgb_masks_final.mul(255).add_(0.5).clamp_(0, 255).permute(0, 2, 3, 1).to("cpu", torch.uint8).numpy()
     # img_color = cv2.cvtColor(rgb_masks_np_final[0], cv2.COLOR_BGR2RGB)
     return rgb_masks_np_final[0]
@@ -221,10 +219,15 @@ class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
     def process(self, inputs, outputs):
         from cityscapesscripts.helpers.labels import trainId2label
 
+        if not os.path.exists(os.path.join(self._working_dir, "predictions", "result")):
+            os.makedirs(os.path.join(self._working_dir, "predictions", "result"))
+        if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
+            os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
+
         for input, output in zip(inputs, outputs):
             file_name = input["file_name"]
             basename = os.path.splitext(os.path.basename(file_name))[0]
-            pred_filename = os.path.join(self._working_dir, basename + "_pred.png")
+            pred_filename = os.path.join(self._working_dir, "predictions", "result", basename + "_pred.png")
 
             output = output["sem_seg"].argmax(dim=0).to(self._cpu_device).numpy()
             pred = 255 * np.ones(output.shape, dtype=np.uint8)
@@ -232,7 +235,11 @@ class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
                 if label.ignoreInEval:
                     continue
                 pred[output == train_id] = label.id
-            Image.fromarray(pred).save(pred_filename)
+                
+
+            visual_pred = process_train_id_to_color_img(pred, dataset='cityscapes')
+            visual_pred_filename = os.path.join(self._working_dir, "predictions", "instance_visualization", basename + "_visual_pred.png")
+            Image.fromarray(visual_pred).save(visual_pred_filename)
 
     def evaluate(self):
         comm.synchronize()
@@ -274,6 +281,8 @@ class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
         }
         #self._working_dir.cleanup()
         self._logger.info(ret)
+        self._logger.info(results)
+
         return ret
 
 

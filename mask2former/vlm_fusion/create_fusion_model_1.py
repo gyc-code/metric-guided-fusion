@@ -198,24 +198,15 @@ class RSIFusion(nn.Module):
 
 
 class ImprovedFusion(nn.Module):
-    def __init__(self, C_dino, C_sam=256, alpha=0.5):
+    def __init__(self, C_dino, C_sam, alpha=0.5):
         super().__init__()
-        self.proj_s = nn.Conv2d(C_sam, C_dino, kernel_size=1, bias=False)
-        self.dwconv = conv3x3(C_dino, C_dino, groups=C_dino)
         self.sobel_x, self.sobel_y = get_sobel_filters(C_dino)
         self.fuse_conv = nn.Conv2d(2 * C_dino, C_dino, kernel_size=1, bias=False)
-        self.act = nn.ReLU(inplace=True)
         self.alpha = nn.Parameter(torch.tensor(alpha))
 
     def forward(self, F_dino, F_sam):
         # 特征对齐
-        F_s = F.interpolate(F_sam, size=F_dino.shape[-2:], mode='bilinear', align_corners=False)
-        if F_s.dtype != F_dino.dtype:
-            F_s = F_s.type_as(F_dino)
-        # 投影到同一维度
-        F_s = self.proj_s(F_s)
-        # 深度卷积
-        F_s = self.dwconv(F_s)
+        F_s = align_channels_and_spatial(F_sam, F_dino)
         # Sobel边缘提取
         edge_x = self.sobel_x(F_s)
         edge_y = self.sobel_y(F_s)
@@ -225,7 +216,6 @@ class ImprovedFusion(nn.Module):
         edge_std = edge.std().detach()
         threshold = edge_mean + 1.0 * edge_std
 
-        # threshold = edge.mean().detach()
         edge_mask = (edge > threshold).float() ### todo :check the channel for edge_mask
 
         # 直接作为mask融合
@@ -265,6 +255,8 @@ def align_channels_and_spatial(src: torch.Tensor, tgt: torch.Tensor) -> torch.Te
     Returns:
         Tensor of shape (N, C_tgt, H, W)
     """
+    if src.dtype != tgt.dtype:
+        src = src.type_as(tgt)
     # 1. Spatial resize
     N, C_tgt, H, W = tgt.shape
     src_resized = F.interpolate(src, size=(H, W), mode='bilinear', align_corners=False)
