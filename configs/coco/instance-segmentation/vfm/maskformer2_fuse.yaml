@@ -6,13 +6,13 @@ MODEL:
   BACKBONE_AUX:
     # NAME: "ImageEncoderViT"
     NAME: "ImageEncoder2"
-
   BACKBONE_BENCH:
     NAME: "D2SwinTransformer"
   MASK_FORMER:
-    FROZE_BACKBONE: True
+    FROZE_BACKBONE: False
     FROZE_AUX_BACKBONE: True
     FROZE_BENCH_BACKBONE: True
+    NUM_OBJECT_QUERIES: 200
   SWIN: 
       #### dinov2 fb version
       EMBED_DIM: 128
@@ -47,29 +47,16 @@ MODEL:
 
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
-  MASK_FORMER:
-    NUM_OBJECT_QUERIES: 200
-
-INPUT:
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
-  MIN_SIZE_TRAIN_SAMPLING: "choice"
-  MIN_SIZE_TEST: 1024
-  MAX_SIZE_TRAIN: 2048 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096
-  MAX_SIZE_TEST: 2048
-  CROP:
-    ENABLED: True
-    TYPE: "absolute"
-    SIZE:  (512, 1024)
-
 SOLVER:
   STEPS: (327778, 355092)
   MAX_ITER: 368750
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 368750
+
 TEST:
-  EVAL_PERIOD: 36875
+  EVAL_PERIOD: 73750
 
 FUSE_TYPE: "channel_replace" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,obj_size_bias
 FUSE_ALPHA: 0.8
-MAPPING: "A"  # feature map matching, e.g. {'res2': 'res2', 'res4': 'res4'} means replace res2 and res4 in main backbone with aux backbone
+MAPPING: "D"  # feature map matching, e.g. {'res2': 'res2', 'res4': 'res4'} means replace res2 and res4 in main backbone with aux backbone
 OUTPUT_DIR: "./output_vlm_link/test"

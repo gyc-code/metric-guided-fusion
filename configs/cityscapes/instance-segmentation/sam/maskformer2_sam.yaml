@@ -3,7 +3,7 @@ MODEL:
   BACKBONE:
     NAME: "ImageEncoderViT"
   MASK_FORMER:
-    FROZE_BACKBONE: True
+    FROZE_BACKBONE: False
   SWIN:
     EMBED_DIM: 128
     DEPTHS: [2, 2, 18, 2]
@@ -13,9 +13,9 @@ MODEL:
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
-  WEIGHTS: "/home/yguo/Documents/other/segment-anything/sam_vit_h_4b8939.pth"
+  # WEIGHTS: "/home/yguo/Documents/other/segment-anything/sam_vit_h_4b8939.pth"
   # WEIGHTS: "/home/yguo/Documents/other/segment-anything/sam_vit_l_0b3195.pth"
-  # WEIGHTS: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
+  WEIGHTS: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
   # WEIGHTS: "./output_vlm/sam/cs_freeze_90k_sam_vit_huge_180k/model_final.pth"
 
 
@@ -25,19 +25,8 @@ SOLVER:
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 180000
 TEST:
-  EVAL_PERIOD: 10000
+  EVAL_PERIOD: 20000
 
-# INPUT:
-#   MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(10, 21)]"] #(5, 21)
-#   MIN_SIZE_TRAIN_SAMPLING: "choice"
-#   MIN_SIZE_TEST: 1024
-#   MAX_SIZE_TRAIN: 2048 # max 是 2048的话，min_size_train里面尺寸不起作用，因为会超过2028，再被scale到2048. 所以原来设置是4096
-#   MAX_SIZE_TEST: 2048
-#   CROP:
-#     ENABLED: True
-#     TYPE: "absolute"
-#     SIZE:  (1024,1024)
-#     # SIZE:  (512,512) # need to be square, otherwise will raise error
 
 DATASETS:
   TRAIN: ("cityscapes_fine_instance_seg_train",) #("cityscapes_fine_instance_seg_train",) #("urbansyn_instance_seg_train",)

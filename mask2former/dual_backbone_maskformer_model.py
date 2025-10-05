@@ -28,12 +28,14 @@ from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replac
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 from mask2former.vfm_diagnostics import compute_metrics_from_features
+import numpy as np
+from typing import Dict, List, Any
 
-
-DEBUG = True  # Set to True to enable debug features like feature visualization
-SHOW = True  # Set to True to visualize and save feature comparisons    
+DEBUG = False  # Set to True to enable debug features like feature visualization
+SHOW = False  # Set to True to visualize and save feature comparisons    
 COMPUTER_COMPLEXITY = False
-DIAGNOSTICS = True  # Set to True to compute and print feature statistics
+DIAGNOSTICS = False  # Set to True to compute and print feature statistics
+PADDING = False
 
 
 if COMPUTER_COMPLEXITY:
@@ -55,6 +57,44 @@ def _humanize(num: float, unit: str = "") -> str:
 
 
 
+def pretty_metric_text(metric_map,
+                       order=('ECR','GIC','FER','SCL','SFC','CPR'),
+                       floatfmt="{:.3f}"):
+    """把 metric_map -> 多行文本。优先显示常用 key 的顺序，其余键跟在后面。"""
+    lines = []
+    # 先按既定顺序
+    for k in order:
+        if k in metric_map:
+            v = metric_map[k]
+            try:
+                v = float(v)
+                lines.append(f"{k}: {floatfmt.format(v)}")
+            except Exception:
+                lines.append(f"{k}: {v}")
+    # 再补充剩余键（若有）
+    for k, v in metric_map.items():
+        if k in order:
+            continue
+        try:
+            v = float(v)
+            lines.append(f"{k}: {floatfmt.format(v)}")
+        except Exception:
+            lines.append(f"{k}: {v}")
+    return "\n".join(lines)
+
+def draw_metric_box(ax, text, fontsize=9, alpha=0.85):
+    """在子图 ax 的右下角绘制带背景的文本框。"""
+    if not text:
+        return
+    ax.text(0.99, 0.01, text,
+            transform=ax.transAxes,   # 归一化坐标系
+            ha='right', va='bottom',
+            fontsize=fontsize,
+            bbox=dict(boxstyle='round,pad=0.3',
+                      fc='w',   # 白色底
+                      ec='0.7', # 边线灰
+                      alpha=alpha))
+
 def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, features_3: dict, features_4: dict,
                                           img_np: np.ndarray, save_dir: str, img_id: str, 
                                           n_components: int = 3):
@@ -72,11 +112,20 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
     feature_keys = list(features_1.keys())
 
     # Column titles
-    titles = ["RGB", "SwinL", "DINOv2", "SAM2", "Fused"]
+    # titles = ["RGB", "SwinL", "DINOv2", "SAM2", "Fused"]
+    titles = ["RGB", "DINOv2", "SAM2"]
 
     for k in feature_keys:
-        feats = [features_1[k], features_2[k], features_3[k], features_4[k]]
-        
+        # feats = [features_1[k], features_2[k], features_3[k], features_4[k]]
+        feats = [features_2[k], features_3[k]]
+        num = len(feats) + 1  # +1 for RGB
+
+        if DIAGNOSTICS:
+            metrics = []
+            for feat in feats:
+                metric_map = compute_metrics_from_features(feat)
+                metrics.append(metric_map)
+
         # Compute mean heatmaps
         mean_heatmaps = []
         for feat in feats:
@@ -115,13 +164,21 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
                 pca_heatmaps.append((up[0].permute(1,2,0).cpu().numpy(), None))
 
         # PCA figure
-        fig, axes = plt.subplots(1, 5, figsize=(30, 6))
+        fig, axes = plt.subplots(1, num, figsize=(30, 6))
         for i, ax in enumerate(axes):
             if i == 0:
                 ax.imshow(img_np)
             else:
                 vis, cmap = pca_heatmaps[i-1]
                 ax.imshow(vis, cmap=cmap, interpolation='nearest')
+
+                # 在右下角叠加该特征图的指标
+                if DIAGNOSTICS and (i-1) < len(metrics):
+                    metric_map = metrics[i-1]  # 与 feats/pca_heatmaps 对齐
+                    text = pretty_metric_text(metric_map)
+                    draw_metric_box(ax, text, fontsize=9, alpha=0.85)
+
+
             ax.set_title(titles[i])
             ax.axis('off')
         pca_path = os.path.join(save_dir, f"{base}_{k}_pca_comparison.png")
@@ -130,18 +187,74 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
         plt.close(fig)
 
         # Mean figure
-        fig, axes = plt.subplots(1, 5, figsize=(30, 6))
+        fig, axes = plt.subplots(1, num, figsize=(30, 6))
         for i, ax in enumerate(axes):
             if i == 0:
                 ax.imshow(img_np)
             else:
                 ax.imshow(mean_heatmaps[i-1], cmap='jet', interpolation='nearest')
+                # 在右下角叠加该特征图的指标
+                if DIAGNOSTICS and (i-1) < len(metrics):
+                    metric_map = metrics[i-1]  # 与 feats/pca_heatmaps 对齐
+                    text = pretty_metric_text(metric_map)
+                    draw_metric_box(ax, text, fontsize=9, alpha=0.85)
+
             ax.set_title(titles[i])
             ax.axis('off')
         mean_path = os.path.join(save_dir, f"{base}_{k}_mean_comparison.png")
         fig.tight_layout()
         fig.savefig(mean_path, dpi=100, bbox_inches='tight')
         plt.close(fig)
+
+
+
+
+
+def mean_metrics_per_stage(metric_main: Dict[str, List[Dict[str, Any]]],
+                           ndigits: int = 2) -> Dict[str, Dict[str, float]]:
+    """
+    计算每个 stage（如 'res2','res3','res4','res5'）内，各指标键的均值（跨该 stage 的样本 list）。
+    
+    Args:
+        metric_main: 形如 {'res2': [dict,...], 'res3': [...], ...}
+                     每个 dict 是一张图（或一个 batch）的指标，如
+                     {'ECR': 5.79, 'FER': 0.02, 'GIC': 0.6, 'SCL': 51.0, 'SFC': 6.11, 'CPR': 0.08}
+        ndigits:     四舍五入保留的小数位；传 None 则不四舍五入
+
+    Returns:
+        一个字典：{stage: {metric_key: mean_value, ...}, ...}
+        若某 metric 在该 stage 全缺失，则返回 NaN。
+    """
+    out: Dict[str, Dict[str, float]] = {}
+
+    for stage, lst in metric_main.items():
+        # 收集该 stage 下所有出现过的指标键的并集
+        keys = set()
+        for d in lst:
+            if isinstance(d, dict):
+                keys.update(d.keys())
+
+        stage_stats: Dict[str, float] = {}
+        for k in keys:
+            vals = []
+            for d in lst:
+                v = d.get(k, np.nan)
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    v = np.nan
+                vals.append(v)
+
+            mean_val = float(np.nanmean(vals)) if len(vals) > 0 else np.nan
+            if ndigits is not None and np.isfinite(mean_val):
+                mean_val = round(mean_val, ndigits)
+            stage_stats[k] = mean_val
+
+        out[stage] = stage_stats
+
+    return out
+
+
 
 @META_ARCH_REGISTRY.register()
 class DualBackboneMaskFormer(nn.Module):
@@ -235,11 +348,16 @@ class DualBackboneMaskFormer(nn.Module):
         self.mapping = mapping
         print("mapping:", mapping)
         if SHOW:
-            self.save_dir = "./debug_image/backbone_feature_fuse_model_0929/"
+            self.save_dir = "./debug_image/backbone_feature_fuse_model_1003/"
             # Create the directory if it doesn't exist
             if os.path.exists(self.save_dir):
                 shutil.rmtree(self.save_dir)
             os.makedirs(self.save_dir, exist_ok=True)
+
+        if DIAGNOSTICS:
+            self.metric_main = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
+            self.metric_aux = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
+
 
     @classmethod
     def from_config(cls, cfg):
@@ -503,7 +621,7 @@ class DualBackboneMaskFormer(nn.Module):
             if self.fuse_type == "no_fuse":
                 pass
             else:
-                if self.training:
+                if PADDING:
                     #### pad for sam when input size is 512*1024
                     padded_images = [] ############# todo :  TO BE REMOVED AFTER COMPARED 
                     for img in images:
@@ -530,7 +648,6 @@ class DualBackboneMaskFormer(nn.Module):
                     for k in features_aux.keys():
                         feature_height = int(features_aux[k].shape[2] / 2)
                         features_aux[k] = features_aux[k][:, :, 0:feature_height, :].half()  # cindy add, align aux features with main features  
-
                 else:
                     if self.backbone_aux._get_name() == "ImageEncoder2":
                         features_aux_list = self.backbone_aux.trunk(images.tensor)
@@ -608,27 +725,21 @@ class DualBackboneMaskFormer(nn.Module):
                 visualize_and_save_feature_comparison(features_bench, features_main, features_aux, features, 
                                                         img_np, self.save_dir, img_id, 
                                                         n_components=3)
-
             if DIAGNOSTICS:
-                print("------- dinov2 backbone -------")
-                mflat = compute_metrics_from_features(features_main['res2'])
-                print("dinov2 res2 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_main['res3'])
-                print("dinov2 res3 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_main['res4'])
-                print("dinov2 res4 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_main['res5'])
-                print("dinov2 res5 backbone:", {k: v.tolist() for k, v in mflat.items()})
-
-                print("------- sam  -------")                
-                mflat = compute_metrics_from_features(features_aux['res2'])
-                print("sam   res2 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_aux['res3'])
-                print("sam   res3 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_aux['res4'])
-                print("sam   res4 backbone:", {k: v.tolist() for k, v in mflat.items()})
-                mflat = compute_metrics_from_features(features_aux['res5'])
-                print("sam   res5 backbone:", {k: v.tolist() for k, v in mflat.items()})
+                for k in features.keys():
+                    mflat = compute_metrics_from_features(features_main[k])
+                    self.metric_main[k].append(mflat)
+                    if k == "res4":
+                        print(f"feature_main[{k}].shape: {features_main[k].shape},  metrics:", mflat)
+                    maux = compute_metrics_from_features(features_aux[k])
+                    self.metric_aux[k].append(maux)
+                
+                if len(self.metric_main['res2']) >= 100:
+                    mean_metrics = mean_metrics_per_stage(self.metric_main)
+                    print("Mean metrics (main):", mean_metrics)
+                    mean_metrics = mean_metrics_per_stage(self.metric_aux)
+                    print("Mean metrics (aux):", mean_metrics)
+                    print('stop diagnose')  # 只打印一次
 
             outputs = self.sem_seg_head(features)
                     

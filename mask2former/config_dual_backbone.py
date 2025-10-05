@@ -108,14 +108,14 @@ def add_maskformer2_dual_backbone_config(cfg):
 
     # SAM backbone
     # aux_backbone add by  cindy
-    cfg.MODEL.MASK_FORMER.FROZE_AUX_BACKBONE = False
+    cfg.MODEL.MASK_FORMER.FROZE_AUX_BACKBONE = True
     cfg.MODEL.BACKBONE_AUX = CN()
     cfg.MODEL.BACKBONE_AUX.NAME = "build_sam_backbone"
     cfg.MODEL.BACKBONE_AUX.OUT_CHANNELS = 256
     cfg.MODEL.WEIGHTS_AUX = ""
 
     # bench_backbone add by  cindy 
-    cfg.MODEL.MASK_FORMER.FROZE_BENCH_BACKBONE = False
+    cfg.MODEL.MASK_FORMER.FROZE_BENCH_BACKBONE = True
     cfg.MODEL.BACKBONE_BENCH = CN()
     cfg.MODEL.BACKBONE_BENCH.NAME = "build_swinl_backbone"
     cfg.MODEL.BACKBONE_BENCH.OUT_CHANNELS = 1024

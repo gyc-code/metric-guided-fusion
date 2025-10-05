@@ -30,18 +30,18 @@ SOLVER:
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 180000
 TEST:
-  EVAL_PERIOD: 10000
+  EVAL_PERIOD: 20000
 
 INPUT:
-  MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
-  MIN_SIZE_TRAIN_SAMPLING: "choice"
-  MIN_SIZE_TEST: 1024
-  MAX_SIZE_TRAIN: 2048
-  MAX_SIZE_TEST: 2048
-  CROP:
-    ENABLED: True
-    TYPE: "absolute"
-    SIZE:  (512, 1024)
+  # MIN_SIZE_TRAIN: !!python/object/apply:eval ["[int(x * 0.1 * 1024) for x in range(5, 21)]"] #(5, 21)
+  # MIN_SIZE_TRAIN_SAMPLING: "choice"
+  # MIN_SIZE_TEST: 1024
+  # MAX_SIZE_TRAIN: 2048
+  # MAX_SIZE_TEST: 2048
+  # CROP:
+  #   ENABLED: True
+  #   TYPE: "absolute"
+  #   SIZE:  (512, 1024)
 
 ##  for debug
 DATASETS:

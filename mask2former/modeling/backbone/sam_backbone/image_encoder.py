@@ -82,20 +82,30 @@ class ImageEncoderViT(Backbone):
         # if not crop_size == [1024, 1024]:
         #     print("Set INPUT.CROP.SIZE to (1024, 1024) in config to change it.")
         
+
         self._out_feature_strides = {
-            "res2": 16,
-            "res3": 16,
+            "res2": 4,
+            "res3": 8,
             "res4": 16,
-            "res5": 16,                                    
+            "res5": 32,
         }
         self._out_feature_channels = {
-            "res2": 256,
+            "res2": 128,
             "res3": 256,
-            "res4": 256,
-            "res5": 256,   
+            "res4": 512,
+            "res5": 1024,
         }
-        self._out_features = ["res2", "res3", "res4", "res5"]
 
+        self.factors = {
+            'res2': 4,
+            'res3': 8,
+            'res4': 16,
+            'res5': 32,
+        }
+        self.base=128
+        self._out_features = cfg.MODEL.SWIN.OUT_FEATURES
+        self.convs = nn.ModuleList([nn.Conv2d(embed_dim, self.base*fact//4, kernel_size=1) for fact in self.factors.values()])
+        
         self.img_size = img_size
 
         self.patch_embed = PatchEmbed(
@@ -205,6 +215,7 @@ class ImageEncoderViT(Backbone):
 
     # modified forward function to return feature maps at different stages and accept input of different sizes
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w, h = x.shape[-2:]
         x = self.patch_embed(x)
         B, H, W, C = x.shape
 
@@ -230,11 +241,16 @@ class ImageEncoderViT(Backbone):
         for blk in self.blocks:
             x = blk(x)
 
-        x = self.neck(x.permute(0, 3, 1, 2))
+        x = x.permute(0, 3, 1, 2)
+        # x = self.neck(x.permute(0, 3, 1, 2))
         # change the return to be dict with feature names, cindy
-        feature = {"res2": x, "res3": x, "res4": x, "res5": x}
+        # feature = {"res2": x, "res3": x, "res4": x, "res5": x}
+        feat_dict = {}
+        for (k, scale), conv in zip(self.factors.items(), self.convs):
+            new_x = F.interpolate(x, size=(w//scale, h//scale))
+            feat_dict[k] = conv(new_x)
 
-        return feature
+        return feat_dict
 
 
     def freeze_backbone(self):
