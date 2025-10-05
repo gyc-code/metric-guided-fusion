@@ -1,0 +1,9 @@
+The name is too long, 273 chars total.
+Trying to shorten...
+New name is dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoieGtuajk1azNqemVqajRsanY3dXhvcmdzIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzp.
+--2025-08-21 13:18:35--  https://dinov3.llamameta.net/dinov3_vit7b16/dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoieGtuajk1azNqemVqajRsanY3dXhvcmdzIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NTU5NDc3MjJ9fX1dfQ__
+Resolving dinov3.llamameta.net (dinov3.llamameta.net)... 108.157.98.29, 108.157.98.99, 108.157.98.108, ...
+Connecting to dinov3.llamameta.net (dinov3.llamameta.net)|108.157.98.29|:443... connected.
+HTTP request sent, awaiting response... 403 Forbidden
+2025-08-21 13:18:36 ERROR 403: Forbidden.
+
