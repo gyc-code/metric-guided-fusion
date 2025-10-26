@@ -132,7 +132,7 @@ def add_maskformer2_config(cfg):
     # Importance sampling parameter for PointRend point sampling during training. Parametr `beta` in
     # the original paper.
     cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO = 0.75
-    cfg.ViT_USE_ADAPTER = True
+    cfg.ViT_USE_ADAPTER = False
     cfg.MODEL.WEIGHTS_BACKBONE = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth"
     cfg.MODEL.BACKBONE_EMB_DIM = 1280  #for dinov3 4096-7B, 1536-giant2, 1280-huge2,  1024-L, 768-base
     cfg.MODEL.WEIGHTS_BACKBONE_NAME = "dinov3_vith16plus"

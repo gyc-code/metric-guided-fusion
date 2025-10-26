@@ -211,6 +211,9 @@ _RAW_CITYSCAPES_SPLITS = {
     
     "kitti360_{task}_train": ("kitti360/2013_05_28_drive_train_frames_image.txt", "kitti360/2013_05_28_drive_train_frames_label.txt"),
     "kitti360_{task}_val": ("kitti360/2013_05_28_drive_val_frames_image_all.txt", "kitti360/2013_05_28_drive_val_frames_label_all.txt"),
+    "kitti360_{task}_val_downsample": ("kitti360/2013_05_28_drive_val_frames_image.txt", "kitti360/2013_05_28_drive_val_frames_label.txt"),
+    "kitti360_{task}_val_small": ("kitti360/2013_05_28_drive_val_frames_image_small.txt", "kitti360/2013_05_28_drive_val_frames_label_small.txt"),
+    
     
     
     

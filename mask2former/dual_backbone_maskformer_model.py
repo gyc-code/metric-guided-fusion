@@ -27,7 +27,8 @@ from .vlm_fusion.create_fusion_model import SemanticEdgeFusion
 from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replace, align_and_concat
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
-from mask2former.vfm_diagnostics import compute_metrics_from_features
+# from mask2former.vfm_diagnostics import compute_metrics_from_features
+from mask2former.vfm_diagnose_new import compute_metrics_from_features
 import numpy as np
 from typing import Dict, List, Any
 
@@ -55,9 +56,49 @@ def _humanize(num: float, unit: str = "") -> str:
         num /= 1000
     return f"{num:.2f} P{unit}".strip()
 
+def pretty_metric_text(
+    metric_map,
+    floatfmt="{:.2f}",
+    sep="  |  ",
+    with_labels=True,
+):
+    """
+    将指标分为两组并带方向箭头：Regional aggregation  Structural contrast
+      Regional aggregation:  ↑SCL, ↑SFC, ↓CPR
+      Structural contrast:      ↑ECR, ↑GIC, ↑FER
+    返回两行文本，便于直接叠加到图上。
+    """
+    def _fmt(k, arrow):
+        v = metric_map.get(k, None)
+        if v is None:
+            val = "—"
+        else:
+            try:
+                val = floatfmt.format(float(v))
+            except Exception:
+                val = str(v)
+        # 对齐一下 key（宽度=3）让观感更整齐
+        return f"{arrow}{k:<3} {val}"
+
+    # 两组：Semantic & Edge
+    sem_parts = [
+        _fmt("SCL", "↑"),
+        _fmt("SFC", "↑"),
+        _fmt("CPR", "↓"),
+    ]
+    edge_parts = [
+        _fmt("ECR", "↑"),
+        _fmt("GIC", "↑"),
+        _fmt("FER", "↑"),
+    ]
+
+    sem_line  = (("Regional aggregation: " if with_labels else "") + sep.join(sem_parts)).rstrip()
+    edge_line = (("Structural contrast:     " if with_labels else "") + sep.join(edge_parts)).rstrip()
+
+    return sem_line + "\n" + edge_line
 
 
-def pretty_metric_text(metric_map,
+def pretty_metric_text_line(metric_map,
                        order=('ECR','GIC','FER','SCL','SFC','CPR'),
                        floatfmt="{:.3f}"):
     """把 metric_map -> 多行文本。优先显示常用 key 的顺序，其余键跟在后面。"""
@@ -112,8 +153,8 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
     feature_keys = list(features_1.keys())
 
     # Column titles
-    # titles = ["RGB", "SwinL", "DINOv2", "SAM2", "Fused"]
-    titles = ["RGB", "DINOv2", "SAM2"]
+    titles = ["RGB", "SwinL", "DINOv2", "SAM2", "Fused"]
+    # titles = ["RGB", "DINOv3", "SAM2"]
 
     for k in feature_keys:
         # feats = [features_1[k], features_2[k], features_3[k], features_4[k]]
@@ -123,7 +164,7 @@ def visualize_and_save_feature_comparison(features_1: dict, features_2: dict, fe
         if DIAGNOSTICS:
             metrics = []
             for feat in feats:
-                metric_map = compute_metrics_from_features(feat)
+                metric_map = compute_metrics_from_features(feat, torch.from_numpy(img_np.transpose(2,0,1)), model_name="dual_backbone_model", image_name=base, k=k)
                 metrics.append(metric_map)
 
         # Compute mean heatmaps
@@ -348,7 +389,7 @@ class DualBackboneMaskFormer(nn.Module):
         self.mapping = mapping
         print("mapping:", mapping)
         if SHOW:
-            self.save_dir = "./debug_image/backbone_feature_fuse_model_1003/"
+            self.save_dir = "./debug_image/backbone_feature_fuse_model_1020_test_with_swin/"
             # Create the directory if it doesn't exist
             if os.path.exists(self.save_dir):
                 shutil.rmtree(self.save_dir)
@@ -357,6 +398,7 @@ class DualBackboneMaskFormer(nn.Module):
         if DIAGNOSTICS:
             self.metric_main = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
             self.metric_aux = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
+            self.metric_bench = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
 
 
     @classmethod
@@ -727,18 +769,24 @@ class DualBackboneMaskFormer(nn.Module):
                                                         n_components=3)
             if DIAGNOSTICS:
                 for k in features.keys():
-                    mflat = compute_metrics_from_features(features_main[k])
+                    mflat = compute_metrics_from_features(features_main[k],image_chw_uint8=batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
+                    maux = compute_metrics_from_features(features_aux[k], image_chw_uint8=batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
+                    mbench = compute_metrics_from_features(features_bench[k], image_chw_uint8=batched_inputs[0]["image"], model_name="bench", image_name=batched_inputs[0]["image_id"], k=str(k))
+
+                    print("feature_main,  metrics:", mflat)
+                    print("feature_aux,  metrics:", maux)
+                    print("feature_bench, metrics:", mbench)
                     self.metric_main[k].append(mflat)
-                    if k == "res4":
-                        print(f"feature_main[{k}].shape: {features_main[k].shape},  metrics:", mflat)
-                    maux = compute_metrics_from_features(features_aux[k])
                     self.metric_aux[k].append(maux)
+                    self.metric_bench[k].append(mbench)
                 
                 if len(self.metric_main['res2']) >= 100:
                     mean_metrics = mean_metrics_per_stage(self.metric_main)
                     print("Mean metrics (main):", mean_metrics)
                     mean_metrics = mean_metrics_per_stage(self.metric_aux)
                     print("Mean metrics (aux):", mean_metrics)
+                    mean_metrics = mean_metrics_per_stage(self.metric_bench)
+                    print("Mean metrics (bench):", mean_metrics)
                     print('stop diagnose')  # 只打印一次
 
             outputs = self.sem_seg_head(features)

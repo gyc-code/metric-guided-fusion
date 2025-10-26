@@ -11,6 +11,5 @@ from .pascal_voc_evaluation import PascalVOCDetectionEvaluator
 from .sem_seg_evaluation import SemSegEvaluator
 from .testing import print_csv_format, verify_results
 from .kitti360_evaluation import Kitti360InstanceEvaluator
-from .custom_kitti360_evaluation import Kitti360CustomInstanceEvaluator
 
 __all__ = [k for k in globals().keys() if not k.startswith("_")]

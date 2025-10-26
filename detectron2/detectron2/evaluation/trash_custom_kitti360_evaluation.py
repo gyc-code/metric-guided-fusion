@@ -11,12 +11,12 @@ import torch
 from PIL import Image
 
 from detectron2.data import MetadataCatalog
+from detectron2.data.detection_utils import read_image
 from detectron2.utils import comm
-from detectron2.utils.file_io import PathManager
-from detectron2.utils.utils import decode_seg_map_sequence
 from .evaluator import DatasetEvaluator
 from detectron2.utils.visualizer import Visualizer, ColorMode
 from .custom_cityscapes_evaluation import CityscapesCustomEvaluator
+import shutil
 
 # Print an error message and quit
 def printError(message):
@@ -39,21 +39,19 @@ class Kitti360CustomInstanceEvaluator(CityscapesCustomEvaluator):
         for input, output in zip(inputs, outputs):
             file_name = input["file_name"]
             basename = os.path.splitext(os.path.basename(file_name))[0]
-            pred_txt = os.path.join(self._working_dir, "predictions", basename + "_pred.txt")
-            if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_masks")):
-                os.makedirs(os.path.join(self._working_dir, "predictions", "instance_masks"))
+            pred_txt = os.path.join(self._working_dir, "predictions", "result", basename + "_pred.txt")
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "result")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "result"))
             if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
                 os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
             if self.save_instances:
-                self.coco_metadata = MetadataCatalog.get("coco_2017_val_panoptic")
-                im = cv2.imread(file_name)
-                v = Visualizer(im[:, :, ::-1], self.coco_metadata, scale=1.2, instance_mode=ColorMode.IMAGE_BW)
-                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device)).get_image()
-                cv2.imwrite(os.path.join(self._working_dir, "predictions", "instance_visualization", basename + ".png"),
-                            instance_result)
+                self.cs_metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+                im = read_image(file_name, format="BGR")
+                v = Visualizer(im[:, :, ::-1], self.cs_metadata, scale=1.2, instance_mode=ColorMode.IMAGE)
+                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device))
+                instance_result.save(self._working_dir + os.sep + "predictions" + os.sep + "instance_visualization" + os.sep +  basename + ".png")
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
-                # output = output[output.scores > 0.1]  ##  cindy add , filter will decrease ap
                 num_instances = len(output)
                 with open(pred_txt, "w") as fout:
                     for i in range(num_instances):
@@ -63,12 +61,12 @@ class Kitti360CustomInstanceEvaluator(CityscapesCustomEvaluator):
                         score = output.scores[i]
                         mask = output.pred_masks[i].numpy().astype("uint8")
                         png_filename = os.path.join(
-                            self._working_dir, "predictions", "instance_masks", basename + "_{}_{}.png".format(i, classes)
+                            self._working_dir, "predictions", "result", basename + "_{}_{}.png".format(i, classes)
                         )
                         Image.fromarray(mask * 255).save(png_filename)
+
                         fout.write(
-                            "{} {} {}\n".format(os.path.join("instance_masks", os.path.basename(png_filename)),
-                                                class_id, score)
+                            "{} {} {}\n".format( os.path.basename(png_filename), class_id, score)
                         )
             else:
                 # Cityscapes requires a prediction file for every ground truth image.
@@ -124,7 +122,9 @@ class Kitti360CustomInstanceEvaluator(CityscapesCustomEvaluator):
 
             ret = OrderedDict()
             ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            self._working_dir.cleanup()
+            self._logger.info(results)
+            # self._working_dir.cleanup()
+            shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
             return ret
         except:
             print('------------ error happen in eval')

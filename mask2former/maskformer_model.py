@@ -7,6 +7,7 @@ from torch.nn import functional as F
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 
 from detectron2.config import configurable
 from detectron2.data import MetadataCatalog
@@ -22,6 +23,57 @@ import math
 from .modeling.criterion import SetCriterion
 from .modeling.matcher import HungarianMatcher
 from sklearn.decomposition import PCA
+
+from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
+from typing import Dict, List, Any
+
+DIAGNOSTICS = True
+
+
+
+def mean_metrics_per_stage(metric_main: Dict[str, List[Dict[str, Any]]],
+                           ndigits: int = 2) -> Dict[str, Dict[str, float]]:
+    """
+    计算每个 stage（如 'res2','res3','res4','res5'）内，各指标键的均值（跨该 stage 的样本 list）。
+    
+    Args:
+        metric_main: 形如 {'res2': [dict,...], 'res3': [...], ...}
+                     每个 dict 是一张图（或一个 batch）的指标，如
+                     {'ECR': 5.79, 'FER': 0.02, 'GIC': 0.6, 'SCL': 51.0, 'SFC': 6.11, 'CPR': 0.08}
+        ndigits:     四舍五入保留的小数位；传 None 则不四舍五入
+
+    Returns:
+        一个字典：{stage: {metric_key: mean_value, ...}, ...}
+        若某 metric 在该 stage 全缺失，则返回 NaN。
+    """
+    out: Dict[str, Dict[str, float]] = {}
+
+    for stage, lst in metric_main.items():
+        # 收集该 stage 下所有出现过的指标键的并集
+        keys = set()
+        for d in lst:
+            if isinstance(d, dict):
+                keys.update(d.keys())
+
+        stage_stats: Dict[str, float] = {}
+        for k in keys:
+            vals = []
+            for d in lst:
+                v = d.get(k, np.nan)
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    v = np.nan
+                vals.append(v)
+
+            mean_val = float(np.nanmean(vals)) if len(vals) > 0 else np.nan
+            if ndigits is not None and np.isfinite(mean_val):
+                mean_val = round(mean_val, ndigits)
+            stage_stats[k] = mean_val
+
+        out[stage] = stage_stats
+
+    return out
 
 
 @META_ARCH_REGISTRY.register()
@@ -76,6 +128,7 @@ class MaskFormer(nn.Module):
             test_topk_per_image: int, instance segmentation parameter, keep topk instances per image
         """
         super().__init__()
+        self._logger = logging.getLogger("detectron2.diagnose")
         self.backbone = backbone
         self.sem_seg_head = sem_seg_head
         self.criterion = criterion
@@ -101,6 +154,9 @@ class MaskFormer(nn.Module):
 
         if not self.semantic_on:
             assert self.sem_seg_postprocess_before_inference
+
+        if DIAGNOSTICS:
+            self.metric = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
 
     @classmethod
     def from_config(cls, cfg):
@@ -443,6 +499,22 @@ class MaskFormer(nn.Module):
                 img_np = self.visualize_preprocess(images)
                 self.visualize_and_save_features_on_images(features, img_np, save_dir, img_id)
                 self.visualize_features_with_pca(features, save_dir, img_id)
+
+
+            if DIAGNOSTICS:
+                for k in features.keys():
+                    mflat = compute_metrics_from_features(features[k],batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
+                    two_mflat = fuse_two_indices(mflat, calib={"FCD_tau": 0.5})
+                    self._logger.info("feature metrics @%s: %s", k, mflat)
+                    self.metric[k].append(mflat)
+
+                self._logger.info("now we have collected:  %s", len(self.metric['res2']))
+                if len(self.metric['res2']) % 10 == 0:
+                    mean_metrics = mean_metrics_per_stage(self.metric)
+                    self._logger.info("Mean metrics (main):  %s", mean_metrics)
+                    self._logger.info("stop diagnose")
+
+
 
             outputs = self.sem_seg_head(features)
             if self.training:

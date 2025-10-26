@@ -46,7 +46,7 @@ from detectron2.evaluation import (
     CityscapesCustomInstanceEvaluator,
     CityscapesCustomSemSegEvaluator,
     CityscapesCustomInstance2SemSegEvaluator,
-    Kitti360CustomInstanceEvaluator,
+    Kitti360InstanceEvaluator,
 )
 from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
 from detectron2.solver.build import maybe_add_gradient_clipping
@@ -121,8 +121,8 @@ class Trainer(DefaultTrainer):
         if evaluator_type == "kitti360_instance":
             assert (
                 torch.cuda.device_count() > comm.get_rank()
-            ), "Kitti360CustomInstanceEvaluator currently do not work with multiple machines."
-            return Kitti360CustomInstanceEvaluator(dataset_name, cfg)
+            ), "Kitti360InstanceEvaluator currently do not work with multiple machines."
+            return Kitti360InstanceEvaluator(dataset_name, cfg)
         # Cityscapes
         if evaluator_type == "cityscapes_instance":
             assert (

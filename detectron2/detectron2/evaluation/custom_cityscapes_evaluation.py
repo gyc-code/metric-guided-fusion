@@ -115,25 +115,18 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
             file_name = input["file_name"]
             basename = os.path.splitext(os.path.basename(file_name))[0]
             pred_txt = os.path.join(self._working_dir, "predictions", "result", basename + "_pred.txt")
-                
             if not os.path.exists(os.path.join(self._working_dir, "predictions", "result")):
                 os.makedirs(os.path.join(self._working_dir, "predictions", "result"))
             if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
                 os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
             if self.save_instances:
                 self.cs_metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
-                # im = cv2.imread(file_name)
                 im = read_image(file_name, format="BGR")
                 v = Visualizer(im[:, :, ::-1], self.cs_metadata, scale=1.2, instance_mode=ColorMode.IMAGE)
-
-                # instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device)).get_image()
                 instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device))
                 instance_result.save(self._working_dir + os.sep + "predictions" + os.sep + "instance_visualization" + os.sep +  basename + ".png")
-                # cv2.imwrite(os.path.join(self._working_dir, "predictions", "instance_visualization", basename + ".png"),
-                #             instance_result)
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
-                # output = output[output.scores > 0.1]  ##  cindy add , filter will decrease ap
                 num_instances = len(output)
                 with open(pred_txt, "w") as fout:
                     for i in range(num_instances):
@@ -145,11 +138,7 @@ class CityscapesCustomInstanceEvaluator(CityscapesCustomEvaluator):
                         png_filename = os.path.join(
                             self._working_dir, "predictions", "result", basename + "_{}_{}.png".format(i, classes)
                         )
-                        # vs_png_filename = os.path.join(
-                        #     self._temp_dir, basename + "_{}_{}_{}.png".format(i, classes, str(score.item()))
-                        # )
                         Image.fromarray(mask * 255).save(png_filename)
-                        # Image.fromarray(mask * 255).save(vs_png_filename)
 
                         fout.write(
                             "{} {} {}\n".format( os.path.basename(png_filename), class_id, score)
@@ -237,9 +226,10 @@ class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
                 pred[output == train_id] = label.id
                 
 
-            visual_pred = process_train_id_to_color_img(pred, dataset='cityscapes')
+            visual_pred = process_train_id_to_color_img(output, dataset='cityscapes')
             visual_pred_filename = os.path.join(self._working_dir, "predictions", "instance_visualization", basename + "_visual_pred.png")
             Image.fromarray(visual_pred).save(visual_pred_filename)
+            Image.fromarray(pred).save(pred_filename)
 
     def evaluate(self):
         comm.synchronize()
@@ -249,10 +239,12 @@ class CityscapesCustomSemSegEvaluator(CityscapesCustomEvaluator):
         # since the script reads CITYSCAPES_DATASET into global variables at load time.
         import cityscapesscripts.evaluation.evalPixelLevelSemanticLabeling as cityscapes_eval
 
-        self._logger.info("Evaluating results under {} ...".format(self._working_dir))
+        # self._logger.info("Evaluating results under {} ...".format(self._working_dir))
+        cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result")
+        self._logger.info("Evaluating results under {} ...".format(cityscapes_eval.args.predictionPath))
 
         # set some global states in cityscapes evaluation API, before evaluating
-        cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir)
+        # cityscapes_eval.args.predictionPath = os.path.abspath(self._working_dir)
         cityscapes_eval.args.predictionWalk = None
         cityscapes_eval.args.JSONOutput = False
         cityscapes_eval.args.colorized = False

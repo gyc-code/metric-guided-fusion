@@ -11,10 +11,11 @@ import torch
 from PIL import Image
 
 from detectron2.data import MetadataCatalog
+from detectron2.data.detection_utils import read_image
 from detectron2.utils import comm
-from detectron2.utils.file_io import PathManager
-from detectron2.utils.utils import decode_seg_map_sequence
 from .evaluator import DatasetEvaluator
+from detectron2.utils.visualizer import Visualizer, ColorMode
+import shutil
 
 # Print an error message and quit
 def printError(message):
@@ -27,7 +28,7 @@ class CityscapesEvaluator(DatasetEvaluator):
     Base class for evaluation using cityscapes API.
     """
 
-    def __init__(self, dataset_name):
+    def __init__(self, dataset_name, cfg):
         """
         Args:
             dataset_name (str): the name of the dataset.
@@ -37,30 +38,8 @@ class CityscapesEvaluator(DatasetEvaluator):
         self._metadata = MetadataCatalog.get(dataset_name)
         self._cpu_device = torch.device("cpu")
         self._logger = logging.getLogger(__name__)
-
-    def reset(self):
-        self._working_dir = tempfile.TemporaryDirectory(prefix="kitti360_eval_")
-        self._visual_dir = tempfile.TemporaryDirectory(prefix="kitti360_visual_")
-        self._temp_dir = self._working_dir.name
-        self._temp_visual_dir = self._visual_dir.name
-        # All workers will write to the same results directory
-        # TODO this does not work in distributed training
-        assert (
-            comm.get_local_size() == comm.get_world_size()
-        ), "CityscapesEvaluator currently do not work with multiple machines."
-        self._temp_dir = comm.all_gather(self._temp_dir)[0]
-        if self._temp_dir != self._working_dir.name:
-            self._working_dir.cleanup()
-        self._logger.info(
-            "Writing cityscapes results to temporary directory {} ...".format(self._temp_dir)
-        )
-
-        self._temp_visual_dir = comm.all_gather(self._temp_visual_dir)[0]
-        if self._temp_visual_dir != self._visual_dir.name:
-            self._visual_dir.cleanup()
-        self._logger.info(
-            "Writing cityscapes visual results to temporary directory {} ...".format(self._temp_visual_dir)
-        )
+        self._working_dir = cfg.OUTPUT_DIR
+        self.save_instances = cfg.SAVE_INSTANCE_VISUALIZATION
 
 
 class Kitti360InstanceEvaluator(CityscapesEvaluator):
@@ -83,7 +62,18 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
             file_name = ('_'.join(last_four_parts))
             # basename = os.path.splitext(os.path.basename(file_name))[0]
             basename = file_name.split('.')[0]
-            pred_txt = os.path.join(self._temp_dir, file_name.replace(".png", "_pred.txt"))
+            pred_txt = os.path.join(self._working_dir, "predictions", "result", basename + "_pred.txt")
+            
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "result")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "result"))
+            if not os.path.exists(os.path.join(self._working_dir, "predictions", "instance_visualization")):
+                os.makedirs(os.path.join(self._working_dir, "predictions", "instance_visualization"))
+            if self.save_instances:
+                self.cs_metadata = MetadataCatalog.get("cityscapes_fine_instance_seg_val")
+                im = read_image(input["file_name"], format="BGR")
+                v = Visualizer(im[:, :, ::-1], self.cs_metadata, scale=1.2, instance_mode=ColorMode.IMAGE)
+                instance_result = v.draw_instance_predictions(output["instances"].to(self._cpu_device))
+                instance_result.save(self._working_dir + os.sep + "predictions" + os.sep + "instance_visualization" + os.sep +  basename + ".png")
 
             if "instances" in output:
                 output = output["instances"].to(self._cpu_device)
@@ -95,8 +85,11 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
                         class_id = name2label[classes].id
                         score = output.scores[i]
                         mask = output.pred_masks[i].numpy().astype("uint8")
+                        # png_filename = os.path.join(
+                        #     self._temp_dir, basename + "_{}_{}.png".format(i, classes)
+                        # )
                         png_filename = os.path.join(
-                            self._temp_dir, basename + "_{}_{}.png".format(i, classes)
+                            self._working_dir, "predictions", "result", basename + "_{}_{}.png".format(i, classes)
                         )
                         Image.fromarray(mask * 255).save(png_filename)
 
@@ -118,14 +111,13 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
             return
         import kitti360scripts.evaluation.semantic_2d.evalInstanceLevelSemanticLabeling as kitti360_eval
 
-        self._logger.info("Evaluating results under {} ...".format(self._temp_dir))
-
         # set some global states in cityscapes evaluation API, before evaluating
-        kitti360_eval.args.predictionPath = os.path.abspath(self._temp_dir)
+        kitti360_eval.args.predictionPath =  os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result")
+        self._logger.info("Evaluating results under {} ...".format(kitti360_eval.args.predictionPath))
         kitti360_eval.args.predictionWalk = None
         kitti360_eval.args.JSONOutput = False
         kitti360_eval.args.colorized = False
-        kitti360_eval.args.gtInstancesFile = os.path.join(self._temp_dir, "gtInstances_kitti360.json")
+        kitti360_eval.args.gtInstancesFile = os.path.join(self._working_dir, "gtInstances_kitti360.json")
         
 
         # These lines are adopted from
@@ -157,11 +149,13 @@ class Kitti360InstanceEvaluator(CityscapesEvaluator):
 
             ret = OrderedDict()
             ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
-            self._working_dir.cleanup()
+            # self._working_dir.cleanup()
+            self._logger.info(results)
+            shutil.rmtree(os.path.abspath(self._working_dir + os.sep + "predictions" + os.sep + "result"))
             return ret
         except:
             print('------------ error happen in eval')
-            self._working_dir.cleanup() 
+            # self._working_dir.cleanup() 
             return None
 
 

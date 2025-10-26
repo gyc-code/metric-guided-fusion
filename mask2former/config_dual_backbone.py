@@ -150,7 +150,7 @@ def add_maskformer2_dual_backbone_config(cfg):
     # for alpha_fuse, the alpha value
     cfg.FUSE_ALPHA = 0.5
     # feature map matching, e.g. {'res2': 'res2', 'res4': 'res4'} means replace res2 and res4 in main backbone with aux backbone
-    cfg.MAPPING = "A"
+    cfg.MAPPING = "D"
     cfg.MODEL.WEIGHTS_BACKBONE = "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth"
     cfg.MODEL.BACKBONE_EMB_DIM = 1280  #for dinov3 4096-7B, 1536-giant2, 1280-huge2,  1024-L, 768-base
     cfg.MODEL.WEIGHTS_BACKBONE_NAME = "dinov3_vith16plus"
