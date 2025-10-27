@@ -8,6 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import shutil
+import logging
 
 from detectron2.config import configurable
 from detectron2.data import MetadataCatalog
@@ -28,8 +29,8 @@ from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replac
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 # from mask2former.vfm_diagnostics import compute_metrics_from_features
-from mask2former.vfm_diagnose_new import compute_metrics_from_features
-import numpy as np
+from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
+# from mask2former.vfm_two_metric import compute_metrics_from_features, fuse_two_indices
 from typing import Dict, List, Any
 
 DEBUG = False  # Set to True to enable debug features like feature visualization
@@ -354,6 +355,7 @@ class DualBackboneMaskFormer(nn.Module):
             test_topk_per_image: int, instance segmentation parameter, keep topk instances per image
         """
         super().__init__()
+        self._logger = logging.getLogger("detectron2.diagnose")
         self.backbone = backbone
         self.backbone_aux = backbone_aux
         if DEBUG:
@@ -769,25 +771,34 @@ class DualBackboneMaskFormer(nn.Module):
                                                         n_components=3)
             if DIAGNOSTICS:
                 for k in features.keys():
-                    mflat = compute_metrics_from_features(features_main[k],image_chw_uint8=batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
-                    maux = compute_metrics_from_features(features_aux[k], image_chw_uint8=batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
-                    mbench = compute_metrics_from_features(features_bench[k], image_chw_uint8=batched_inputs[0]["image"], model_name="bench", image_name=batched_inputs[0]["image_id"], k=str(k))
+                    mflat = compute_metrics_from_features(features_main[k],batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
+                    maux = compute_metrics_from_features(features_aux[k], batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
+                    mbench = compute_metrics_from_features(features_bench[k], batched_inputs[0]["image"], model_name="bench", image_name=batched_inputs[0]["image_id"], k=str(k))
 
-                    print("feature_main,  metrics:", mflat)
-                    print("feature_aux,  metrics:", maux)
-                    print("feature_bench, metrics:", mbench)
+                    two_mflat = fuse_two_indices(mflat, calib={"FCD_tau": 0.5})
+                    two_maux = fuse_two_indices(maux, calib={"FCD_tau": 0.5})
+                    two_mbench = fuse_two_indices(mbench, calib={"FCD_tau": 0.5})
+
+                    self._logger.info("feature_main metrics @%s: %s", k, mflat)
+                    self._logger.info("feature_main metrics @%s: %s", k, two_mflat)
+                    self._logger.info("feature_aux  metrics @%s: %s", k, maux)
+                    self._logger.info("feature_aux  metrics @%s: %s", k, two_maux)
+                    self._logger.info("feature_bench metrics @%s: %s", k, mbench)
+                    self._logger.info("feature_bench metrics @%s: %s", k, two_mbench)
                     self.metric_main[k].append(mflat)
                     self.metric_aux[k].append(maux)
                     self.metric_bench[k].append(mbench)
                 
-                if len(self.metric_main['res2']) >= 100:
+                self._logger.info("now we have collected:  %s", len(self.metric_main['res2']))
+                if len(self.metric_main['res2']) % 10 == 0:
                     mean_metrics = mean_metrics_per_stage(self.metric_main)
-                    print("Mean metrics (main):", mean_metrics)
+                    self._logger.info("Mean metrics (main):  %s", mean_metrics)
                     mean_metrics = mean_metrics_per_stage(self.metric_aux)
-                    print("Mean metrics (aux):", mean_metrics)
+                    self._logger.info("Mean metrics (aux):   %s", mean_metrics)
                     mean_metrics = mean_metrics_per_stage(self.metric_bench)
-                    print("Mean metrics (bench):", mean_metrics)
-                    print('stop diagnose')  # 只打印一次
+                    self._logger.info("Mean metrics (bench): %s", mean_metrics)
+                    self._logger.info("stop diagnose")
+
 
             outputs = self.sem_seg_head(features)
                     

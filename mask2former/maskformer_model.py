@@ -27,7 +27,7 @@ from sklearn.decomposition import PCA
 from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
 from typing import Dict, List, Any
 
-DIAGNOSTICS = True
+DIAGNOSTICS = False
 
 
 

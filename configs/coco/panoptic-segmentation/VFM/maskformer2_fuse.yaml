@@ -1,0 +1,61 @@
+_BASE_: ../maskformer2_R50_bs16_50ep.yaml
+MODEL:
+  META_ARCHITECTURE: "DualBackboneMaskFormer"
+  BACKBONE:
+    NAME:  "DinoV3Backbone" #"DinoV2BaseBackbone"
+  BACKBONE_AUX:
+    # NAME: "ImageEncoderViT"
+    NAME: "ImageEncoder2"
+  BACKBONE_BENCH:
+    NAME: "D2SwinTransformer"
+  MASK_FORMER:
+    FROZE_BACKBONE: False
+    FROZE_AUX_BACKBONE: True
+    FROZE_BENCH_BACKBONE: True
+    NUM_OBJECT_QUERIES: 200
+  SWIN: 
+      #### dinov2 fb version
+      EMBED_DIM: 128
+      NUM_HEADS: [4, 8, 16, 32]
+      #### dinov2 fb version
+
+      ### swin L version open if need bench weight
+      # EMBED_DIM: 192
+      # NUM_HEADS: [6, 12, 24, 48]
+      ### swin L version
+      DEPTHS: [2, 2, 18, 2]
+      WINDOW_SIZE: 12
+      APE: False
+      DROP_PATH_RATE: 0.3
+      PATCH_NORM: True
+      PRETRAIN_IMG_SIZE: 384
+
+  # WEIGHTS: "./output_vlm/facebook_version/cs_fire_correct_90k_vitb_fb_512_1024/model_final.pth"
+  WEIGHTS: ""
+  WEIGHTS_AUX: "./pretrain/sam2.1_hiera_base_plus.pt" #"./pretrain/sam2.1_hiera_large.pt"
+  # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_l_0b3195.pth"
+  # WEIGHTS_AUX: "/home/yguo/Documents/other/segment-anything/sam_vit_b_01ec64.pth"
+  WEIGHTS_BENCH: "./pretrain/maskformer2_swin_base_IN21k_384_bs16_90k_model_final_7a3b6d.pkl" #"./pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # use swin L config EMBED_DIM: 128
+  # WEIGHTS_BENCH: ""
+  # "pretrain/coco-mask2formwe-200queries-swinL-100epoch-model_final_e5f453.pkl" # 
+  # WEIGHTS_BENCH: "./pretrain/swin_large_patch4_window12_384_22k.pkl"
+
+  
+  WEIGHTS_BACKBONE: "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth"
+  BACKBONE_EMB_DIM: 768
+  WEIGHTS_BACKBONE_NAME: dinov3_vitb16
+
+  PIXEL_MEAN: [123.675, 116.280, 103.530]
+  PIXEL_STD: [58.395, 57.120, 57.375]
+SOLVER:
+  MAX_ITER: 368750
+  IMS_PER_BATCH: 3
+  CHECKPOINT_PERIOD: 368750
+
+TEST:
+  EVAL_PERIOD: 36875
+
+FUSE_TYPE: "channel_replace" ###  type should be no_fuse, channel_concat, channel_replace, fuse_head, alpha_fuse, edge_fusion,obj_size_bias
+FUSE_ALPHA: 0.8
+MAPPING: "D"  # feature map matching, e.g. {'res2': 'res2', 'res4': 'res4'} means replace res2 and res4 in main backbone with aux backbone
+OUTPUT_DIR: "./output_vlm_link/test"
