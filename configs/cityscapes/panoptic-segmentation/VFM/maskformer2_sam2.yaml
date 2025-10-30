@@ -1,7 +1,9 @@
 _BASE_: ../maskformer2_R50_bs16_90k.yaml
 MODEL:
   BACKBONE:
-    NAME: "D2SwinTransformer"
+    NAME: "ImageEncoder2"  #"ImageEncoder2"
+  MASK_FORMER:
+    FROZE_BACKBONE: True
   SWIN:
     EMBED_DIM: 128
     DEPTHS: [2, 2, 18, 2]
@@ -11,13 +13,15 @@ MODEL:
     DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     PRETRAIN_IMG_SIZE: 384
-  WEIGHTS: "./pretrain/swin_base_patch4_window12_384_22k.pkl"
+  # WEIGHTS: "./pretrain/sam2.1_hiera_large.pt"
+  WEIGHTS: "./pretrain/sam2.1_hiera_base_plus.pt"
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
 SOLVER:
   IMS_PER_BATCH: 3
   CHECKPOINT_PERIOD: 179999
   MAX_ITER: 180000
+
 TEST:
   EVAL_PERIOD: 180000
 
