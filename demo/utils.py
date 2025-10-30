@@ -55,6 +55,8 @@ def setup_dual_backbone_cfg(args):
     add_maskformer2_dual_backbone_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    # print(cfg.SOLVER.IMS_PER_BATCH, type(cfg.SOLVER.IMS_PER_BATCH))
+    cfg.SOLVER.IMS_PER_BATCH = 1
     cfg.freeze()
     return cfg
 
@@ -303,10 +305,9 @@ def evaluate_kitti(result_path):
     
     
 def preparation(output):
-    folder = output
-    result_save_folder = folder + 'instance_img'
-    visul_save_folder = folder  + 'visul_img'
-    other_map_save_folder = folder  + 'other_map'
+    result_save_folder = output + 'instance_img'
+    visul_save_folder = output  + 'visul_img'
+    other_map_save_folder = output  + 'other_map'
     creat_empty_folder(result_save_folder)
     creat_empty_folder(visul_save_folder)
     creat_empty_folder(other_map_save_folder)

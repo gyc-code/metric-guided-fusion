@@ -63,8 +63,8 @@ def get_parser():
         # default="configs/cityscapes/instance-segmentation/sam2/maskformer2_sam2.yaml",
         # default="configs/cityscapes/instance-segmentation/dinoV2/maskformer2_dinov2_large_bs16_50ep.yaml",
         # default="configs/cityscapes/instance-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_90k_uda.yaml",
-        # default="configs/cityscapes/instance-segmentation/vlm_fusion/maskformer2_dinov2_sam.yaml",
-        default="configs/cityscapes/instance-segmentation/dinoV3/dinov3_vit7b16.yaml",
+        default="",
+        # default="configs/cityscapes/instance-segmentation/dinoV3/dinov3_vit7b16.yaml",
 
         metavar="FILE",
         help="path to config file",
@@ -86,7 +86,7 @@ def get_parser():
     )
     parser.add_argument(
         "--output",
-        default='visual_feature/dinov3_huge_plus_0.5/',
+        default='',
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -103,9 +103,9 @@ def get_parser():
         # default=['MODEL.WEIGHTS','./output_vlm_link/facebook_version_test_dinov2/cs_fire_correct_90k_vitb_fb_512_1024/model_0089999.pth'],
         # default=['MODEL.WEIGHTS',"./output_vlm_link/sam2/cs_freeze_180k_sam2_vit_base+_180k/model_0179999.pth"],
         # default=['MODEL.WEIGHTS',"./output_vlm_link/fuse/806_test1_alpha_edge_fuse_cs_dino_fire_sam2_freeze_180k_512_1024_bs3/model_0179999.pth"],
-        default=['MODEL.WEIGHTS',"./output_vlm_link/dinov3/cs_fire_vit_huge_plus_90k/model_final.pth"],
+        # default=['MODEL.WEIGHTS',"/home/yguo/Documents/other/UDA4Inst/output_vlm_link/fuse_channel_replace/replace_4/model_0179999.pth"],
         
-        # default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output/instan_seg/mask2former_cs2cs/model_final.pth'],
+        default=['MODEL.WEIGHTS','/home/yguo/Documents/other/UDA4Inst/output_vlm_link/dinov3/cs_on_fire_dinov3_vit_base_180k/model_0179999.pth'],
         # default=['MODEL.WEIGHTS','/home/yguo/.cache/torch/hub/checkpoints/dinov2_vitl14_pretrain.pth'],
         nargs=argparse.REMAINDER,
     )
@@ -129,7 +129,7 @@ def process_one(path, demo, _metadata, result_save_folder, visul_save_folder, ot
     cpu_device = torch.device("cpu")
     instances = predictions['instances'].to(cpu_device)
     # instances = instances[instances.scores.cpu() > 0.85]
-    instances = instances[instances.scores.cpu() > 0.5]
+    # instances = instances[instances.scores.cpu() > 0.5]
 
     num_instances = len(instances)
     print('num_instances:', num_instances)
@@ -152,14 +152,18 @@ def process_all(inputs, demo, metadata, result_save_folder, visul_save_folder, e
 if __name__ == "__main__":
     if not ONLY_VAL:
         args = get_parser().parse_args()
-        result_save_folder, visul_save_folder, other_map_save_folder  = preparation(args.output)
+        model_path = args.opts[1]
+        model_name_str = model_path.split('/')[-1] 
+        folder = model_path[:len(model_path)-len(model_name_str)]
+        args.config_file = folder + "config.yaml"
+        result_save_folder, visul_save_folder, other_map_save_folder  = preparation(folder)
 
         '''  input multi model, seperate by, run loop'''
         args_copy = copy.deepcopy(args)
         model_weights_path = args_copy.opts[1].split(' ')
         model = model_weights_path[0]
         args.opts[1] = model
-        if "/fuse/" in model_weights_path[0]:    
+        if "fuse" in model_weights_path[0]:    
             cfg = setup_dual_backbone_cfg(args)
         else:
             cfg = setup_cfg(args)
@@ -196,7 +200,7 @@ if __name__ == "__main__":
         # process_one(inputs[0], demo, _metadata, result_save_folder, visul_save_folder, other_map_save_folder, dataset_name)
     
     if EVAL:
-        if 1:
+        if 0:
             # organise_evaluate_folder(result_save_folder)
             # organise_evaluate_folder(visul_save_folder)
             os.environ['CITYSCAPES_RESULTS'] = result_save_folder
