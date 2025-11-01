@@ -29,14 +29,14 @@ from .vlm_fusion.create_fusion_model_1 import MultiStageFusion, align_and_replac
 from .vlm_fusion.create_dino_sam_fusion_model import FeatureFusionHead
 from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 # from mask2former.vfm_diagnostics import compute_metrics_from_features
-# from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
-from mask2former.vfm_metric_batch import compute_metrics_from_features, compute_FCD_from_features
+from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
+# from mask2former.vfm_two_metric import compute_metrics_from_features, fuse_two_indices
 from typing import Dict, List, Any
 
 DEBUG = False  # Set to True to enable debug features like feature visualization
 SHOW = False  # Set to True to visualize and save feature comparisons    
 COMPUTER_COMPLEXITY = False
-DIAGNOSTICS = True  # Set to True to compute and print feature statistics
+DIAGNOSTICS = False  # Set to True to compute and print feature statistics
 PADDING = False
 
 
@@ -400,6 +400,7 @@ class DualBackboneMaskFormer(nn.Module):
         if DIAGNOSTICS:
             self.metric_main = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
             self.metric_aux = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
+            self.metric_bench = {'res2': [], 'res3': [], 'res4': [], 'res5': []}
 
 
     @classmethod
@@ -704,6 +705,61 @@ class DualBackboneMaskFormer(nn.Module):
 
             if DEBUG:
                 features_bench = self.backbone_bench(images.tensor)  # cindy add bench backbone
+            
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            if self.fuse_type == "alpha_fuse":
+                # test 1   F_dino + self.alpha * F_fuse
+                if self.training:
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda().half()
+                else:
+                    fusion_model = MultiStageFusion(alpha = self.fuse_alpha).cuda()
+                features = fusion_model(features_main, features_aux)
+
+            elif self.fuse_type == "channel_replace":
+                # test 2  Replace selected keys in dino_feats with aligned sam_feats.
+                features = align_and_replace(features_main, features_aux, self.mapping)  # cindy add, use main features for now
+                
+            elif self.fuse_type == "channel_concat":
+                features = align_and_concat(features_main, features_aux)
+
+            elif self.fuse_type == "obj_size_bias":
+                
+                if self.training:
+                    model = DualBackboneKeepDino(
+                        dino_channels={'res2':128,'res3':256,'res4':512,'res5':1024},
+                        sam_channels={'res2':112,'res3':224,'res4':448,'res5':896},
+                    ).to(device).half()
+                else:
+                    model = DualBackboneKeepDino(
+                        dino_channels={'res2':128,'res3':256,'res4':512,'res5':1024},
+                        sam_channels={'res2':112,'res3':224,'res4':448,'res5':896},
+                    ).to(device)
+                features, aux = model(features_main, features_aux)
+
+            elif self.fuse_type == "fuse_head":
+                ###### test 3
+                sam_channel = features_aux['res2'].shape[1]
+                dino_channel = [v.shape[1] for v in features_main.values()]
+                if self.training:
+                    head = FeatureFusionHead(dino_channel, sam_channel).to(device).half()
+                else:
+                    head = FeatureFusionHead(dino_channel, sam_channel).to(device)
+                features = head(features_main, features_aux)
+            elif self.fuse_type == "edge_fusion":
+                model  = SemanticEdgeFusion().to(device)
+                features = model(features_main, features_aux)
+            # elif self.fuse_type == "Residual_Soft_Injection":
+            #     # Residual Soft Injection
+            #     if self.training:
+            #         injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda().half()
+            #     else:
+            #         injection_model = Residual_Soft_Injection(alpha = self.fuse_alpha).cuda()
+            #     features = injection_model(features_main, features_aux)
+            
+            elif self.fuse_type == "no_fuse":
+                # test 4  No fusion, use main features only
+                features = features_main
 
             # visualize and save features
             if SHOW:
@@ -714,46 +770,35 @@ class DualBackboneMaskFormer(nn.Module):
                                                         img_np, self.save_dir, img_id, 
                                                         n_components=3)
             if DIAGNOSTICS:
-                fcd_list = {}
-                for k in features_main.keys():
-                    # mmain = compute_metrics_from_features(features_main[k],batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
-                    # maux = compute_metrics_from_features(features_aux[k], batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
-                    # self._logger.info("feature_main metrics @%s: %s", k, mmain)
-                    # self._logger.info("feature_aux  metrics @%s: %s", k, maux)
-                    # self.metric_main[k].append(mmain)
-                    # self.metric_aux[k].append(maux)
-                    fcd = compute_FCD_from_features(features_aux[k], batched_inputs[0]["image"], q_top=0.10, q_img=0.10, dilate_r=2)
-                    # self._logger.info("FCD in aux metrics @%s: %s", k, fcd)
-                    fcd_list[k] = fcd
+                for k in features.keys():
+                    mflat = compute_metrics_from_features(features_main[k],batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
+                    maux = compute_metrics_from_features(features_aux[k], batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
+                    mbench = compute_metrics_from_features(features_bench[k], batched_inputs[0]["image"], model_name="bench", image_name=batched_inputs[0]["image_id"], k=str(k))
 
-                # self._logger.info("now we have collected:  %s", len(self.metric_main['res2']))
-                # if len(self.metric_main['res2']) % 10 == 0:
-                #     mean_metrics = mean_metrics_per_stage(self.metric_main)
-                #     self._logger.info("Mean metrics (main):  %s", mean_metrics)
-                #     mean_metrics = mean_metrics_per_stage(self.metric_aux)
-                #     self._logger.info("Mean metrics (aux):   %s", mean_metrics)
+                    two_mflat = fuse_two_indices(mflat, calib={"FCD_tau": 0.5})
+                    two_maux = fuse_two_indices(maux, calib={"FCD_tau": 0.5})
+                    two_mbench = fuse_two_indices(mbench, calib={"FCD_tau": 0.5})
 
+                    self._logger.info("feature_main metrics @%s: %s", k, mflat)
+                    self._logger.info("feature_main metrics @%s: %s", k, two_mflat)
+                    self._logger.info("feature_aux  metrics @%s: %s", k, maux)
+                    self._logger.info("feature_aux  metrics @%s: %s", k, two_maux)
+                    self._logger.info("feature_bench metrics @%s: %s", k, mbench)
+                    self._logger.info("feature_bench metrics @%s: %s", k, two_mbench)
+                    self.metric_main[k].append(mflat)
+                    self.metric_aux[k].append(maux)
+                    self.metric_bench[k].append(mbench)
+                
+                self._logger.info("now we have collected:  %s", len(self.metric_main['res2']))
+                if len(self.metric_main['res2']) % 10 == 0:
+                    mean_metrics = mean_metrics_per_stage(self.metric_main)
+                    self._logger.info("Mean metrics (main):  %s", mean_metrics)
+                    mean_metrics = mean_metrics_per_stage(self.metric_aux)
+                    self._logger.info("Mean metrics (aux):   %s", mean_metrics)
+                    mean_metrics = mean_metrics_per_stage(self.metric_bench)
+                    self._logger.info("Mean metrics (bench): %s", mean_metrics)
+                    self._logger.info("stop diagnose")
 
-            """ chose which stride according to fcd_list """
-            sums = {k: v.nansum() for k, v in fcd_list.items()}  # 没有 NaN 就用 v.sum()
-            best_k, best_sum_tensor = max(sums.items(), key=lambda kv: kv[1].item())
-            if best_k == 'res2':
-                mapping = "A"
-            elif best_k == 'res3':
-                mapping = "B"
-            elif best_k == 'res4':
-                mapping = "D"
-            elif best_k == 'res5':
-                mapping = "E"
-            self._logger.info("BEST FCD in aux:   %s  , sum is %s ", best_k, best_sum_tensor.item())
-
-            if self.fuse_type == "channel_replace":
-                # test 2  Replace selected keys in dino_feats with aligned sam_feats.
-                features = align_and_replace(features_main, features_aux, mapping)  # cindy add, use main features for now
-            
-            elif self.fuse_type == "no_fuse":
-                # test 4  No fusion, use main features only
-                features = features_main
 
             outputs = self.sem_seg_head(features)
                     
@@ -939,6 +984,22 @@ class DualBackboneMaskFormer(nn.Module):
         topk_indices = topk_indices // self.sem_seg_head.num_classes
         # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
         mask_pred = mask_pred[topk_indices]
+        
+        ############# cindy find repeat instances
+        # unique_values, counts = topk_indices.unique(return_counts=True)
+        # # 找到重复值（计数大于1的值）
+        # duplicate_values = unique_values[counts > 1]
+        # # 创建布尔掩码，标记重复值的位置为True
+        # mask = torch.isin(topk_indices, duplicate_values)
+        # print(len(topk_indices)-len(unique_values))
+        # print(mask)
+        # labels_per_image[mask],  scores_per_image[mask]
+        ############# cindy find repeat instances
+
+        # mask_pred = mask_pred[unique_indices]
+
+        # np.save("./vehicle_feature/" + str(self.local_count) + "_topk_indices.npy", topk_indices.cpu())
+        # if this is panoptic segmentation, we only keep the "thing" classes
         if self.panoptic_on:
             keep = torch.zeros_like(scores_per_image).bool()
             for i, lab in enumerate(labels_per_image):

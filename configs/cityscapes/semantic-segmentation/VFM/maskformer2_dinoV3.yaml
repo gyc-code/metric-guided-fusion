@@ -1,0 +1,36 @@
+_BASE_: ../maskformer2_R50_bs16_90k.yaml
+MODEL:
+  BACKBONE:
+    NAME: "DinoV3Backbone"
+  MASK_FORMER:
+    FROZE_BACKBONE: False
+  SWIN:
+    EMBED_DIM: 128
+    DEPTHS: [2, 2, 18, 2]
+    NUM_HEADS: [4, 8, 16, 32]
+    WINDOW_SIZE: 12
+    APE: False
+    DROP_PATH_RATE: 0.3
+    PATCH_NORM: True
+    PRETRAIN_IMG_SIZE: 384
+  WEIGHTS: ""
+  # WEIGHTS_BACKBONE: "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth"
+  # BACKBONE_EMB_DIM: 1280  #4096-7B, 1536-giant2, 1280-huge2,  1024-L, 768-base
+  # WEIGHTS_BACKBONE_NAME: dinov3_vith16plus
+
+
+  WEIGHTS_BACKBONE: "/home/yguo/.cache/torch/hub/checkpoints/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth" #"/home/yguo/Documents/other/UDA4Inst/output_vlm_link/dinov3/cs_freeze_dinov3_vit_base_180k/model_0179999.pth" #dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth
+  BACKBONE_EMB_DIM: 768
+  WEIGHTS_BACKBONE_NAME: dinov3_vitb16
+
+  PIXEL_MEAN: [123.675, 116.280, 103.530]
+  PIXEL_STD: [58.395, 57.120, 57.375]
+
+SOLVER:
+  IMS_PER_BATCH: 3
+  MAX_ITER: 180000
+  CHECKPOINT_PERIOD: 180000
+TEST:
+  EVAL_PERIOD: 10000
+
+ViT_USE_ADAPTER: False
