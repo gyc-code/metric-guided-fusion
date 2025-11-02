@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import shutil
 import logging
+import time
 
 from detectron2.config import configurable
 from detectron2.data import MetadataCatalog
@@ -31,6 +32,7 @@ from .vlm_fusion.create_dino_sam_fusion_obj_size import DualBackboneKeepDino
 # from mask2former.vfm_diagnostics import compute_metrics_from_features
 # from mask2former.vfm_diagnose_new import compute_metrics_from_features, fuse_two_indices
 from mask2former.vfm_metric_batch import compute_metrics_from_features, compute_FCD_from_features
+from mask2former.vfm_metric_batch_fastter import  compute_FCD_for_stages_fast
 from typing import Dict, List, Any
 
 DEBUG = False  # Set to True to enable debug features like feature visualization
@@ -714,28 +716,30 @@ class DualBackboneMaskFormer(nn.Module):
                                                         img_np, self.save_dir, img_id, 
                                                         n_components=3)
             if DIAGNOSTICS:
-                fcd_list = {}
-                for k in features_main.keys():
-                    # mmain = compute_metrics_from_features(features_main[k],batched_inputs[0]["image"],model_name="main", image_name=batched_inputs[0]["image_id"], k = str(k))
-                    # maux = compute_metrics_from_features(features_aux[k], batched_inputs[0]["image"], model_name="aux", image_name=batched_inputs[0]["image_id"], k=str(k))
-                    # self._logger.info("feature_main metrics @%s: %s", k, mmain)
-                    # self._logger.info("feature_aux  metrics @%s: %s", k, maux)
-                    # self.metric_main[k].append(mmain)
-                    # self.metric_aux[k].append(maux)
-                    fcd = compute_FCD_from_features(features_aux[k], batched_inputs[0]["image"], q_top=0.10, q_img=0.10, dilate_r=2)
-                    # self._logger.info("FCD in aux metrics @%s: %s", k, fcd)
-                    fcd_list[k] = fcd
-
-                # self._logger.info("now we have collected:  %s", len(self.metric_main['res2']))
-                # if len(self.metric_main['res2']) % 10 == 0:
-                #     mean_metrics = mean_metrics_per_stage(self.metric_main)
-                #     self._logger.info("Mean metrics (main):  %s", mean_metrics)
-                #     mean_metrics = mean_metrics_per_stage(self.metric_aux)
-                #     self._logger.info("Mean metrics (aux):   %s", mean_metrics)
-
+                batch_images = torch.stack([x["image"] for x in batched_inputs], dim=0)
+                # fcd_list = {}
+                # s = time.time()
+                # for k in features_main.keys():
+                #     fcd = compute_FCD_from_features(features_aux[k], batch_images, q_top=0.10, q_img=0.10, dilate_r=2)
+                #     fcd_list[k] = fcd
+                # print("FCD compute time:", time.time() - s)
+                # s = time.time()
+                fcd_all = compute_FCD_for_stages_fast(
+                    features_aux, batch_images,
+                    order=["res2","res3","res4","res5"],   # 可选
+                    q_top=0.10, q_img=0.10, dilate_r=2, border=1,
+                    scl_down=4,                            # 关键提速
+                    scl_dirs=((1,0),(-1,0),(0,1),(0,-1)),  # 4 方向
+                    scl_num_radii=12, scl_early_stop=True,
+                    pca_solver="power", pca_power_iters=5  # 更快的 PCA
+                ) 
+                # print("FCD_for_stages_fast compute time:", time.time() - s)      
+                
+                # print("new fcd_all:", fcd_all)    
+                # print("old fcd is ", fcd_list)
 
             """ chose which stride according to fcd_list """
-            sums = {k: v.nansum() for k, v in fcd_list.items()}  # 没有 NaN 就用 v.sum()
+            sums = {k: v.nansum() for k, v in fcd_all.items()}  # 没有 NaN 就用 v.sum()
             best_k, best_sum_tensor = max(sums.items(), key=lambda kv: kv[1].item())
             if best_k == 'res2':
                 mapping = "A"
@@ -745,7 +749,7 @@ class DualBackboneMaskFormer(nn.Module):
                 mapping = "D"
             elif best_k == 'res5':
                 mapping = "E"
-            self._logger.info("BEST FCD in aux:   %s  , sum is %s ", best_k, best_sum_tensor.item())
+            # self._logger.info("BEST FCD in aux:   %s  , sum is %s ", best_k, best_sum_tensor.item())
 
             if self.fuse_type == "channel_replace":
                 # test 2  Replace selected keys in dino_feats with aligned sam_feats.
