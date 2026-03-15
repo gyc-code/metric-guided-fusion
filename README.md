@@ -1,80 +1,273 @@
-# UDA4Inst: ... 
-TO BE OPEN
-# Mask2Former: Masked-attention Mask Transformer for Universal Image Segmentation (CVPR 2022)
+# Metric-Guided Feature Fusion of Visual Foundation Models for Segmentation Tasks
 
-[Bowen Cheng](https://bowenc0221.github.io/), [Ishan Misra](https://imisra.github.io/), [Alexander G. Schwing](https://alexander-schwing.de/), [Alexander Kirillov](https://alexander-kirillov.github.io/), [Rohit Girdhar](https://rohitgirdhar.github.io/)
+<p align="center">
+  <img src="assets/teaser.png" width="90%">
+</p>
 
-[[`arXiv`](https://arxiv.org/abs/2112.01527)] [[`Project`](https://bowenc0221.github.io/mask2former)] [[`BibTeX`](#CitingMask2Former)]
+<p align="center">
+  <a href="https://arxiv.org/abs/xxxx.xxxxx"><img src="https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg"></a>
+  <a href="https://cvpr.thecvf.com/Conferences/2026"><img src="https://img.shields.io/badge/CVPR%202026-Findings-blue.svg"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Project-Page-green.svg"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-yellow.svg"></a>
+</p>
 
-<div align="center">
-  <img src="https://bowenc0221.github.io/images/maskformerv2_teaser.png" width="100%" height="100%"/>
-</div><br/>
+<p align="center">
+  <b>CVPR 2026 Findings Track</b>
+</p>
 
-### Features
-* A single architecture for panoptic, instance and semantic segmentation.
-* Support major segmentation datasets: ADE20K, Cityscapes, COCO, Mapillary Vistas.
+## 📢 News
 
-## Updates
-* Add Google Colab demo.
-* Video instance segmentation is now supported! Please check our [tech report](https://arxiv.org/abs/2112.10764) for more details.
+- **[2026.xx]** Code released! 🎉
+- **[2026.xx]** Paper accepted to CVPR 2026 Findings Track!
 
-## Installation
+## 📖 Abstract
 
-See [installation instructions](INSTALL.md).
+Although large-scale visual foundation models (VFMs) achieve remarkable performance in semantic understanding, they still underperform in instance-aware dense prediction tasks. We observe that different VFMs exhibit complementary representational biases: **SAM2** focuses on fine-grained object boundaries (*edge-strong*), while **DINOv3** emphasizes object-level structure (*structure-strong*).
 
-## Getting Started
+We propose a **metric-guided fusion framework** that:
+1. Introduces label-free metrics (**Structural Coherence** and **Edge Fidelity**) to quantify VFM biases
+2. Identifies complementary encoder pairs based on metric profiles
+3. Fuses features via a lightweight **master-auxiliary scheme** with single-stage training
 
-See [Preparing Datasets for Mask2Former](datasets/README.md).
+Our method achieves consistent improvements on COCO and Cityscapes benchmarks, with notable gains on boundary-sensitive categories.
 
-See [Getting Started with Mask2Former](GETTING_STARTED.md).
+## 🔑 Key Contributions
 
-Run our demo using Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1uIWE5KbGFSjrxey2aRd5pWkKNY1_SaNq)
+- **Novel Metrics Suite**: Label-free SC/EF metrics for interpretable assessment of VFM representational bias
+- **Lightweight Fusion**: Simple master-auxiliary scheme with minimal overhead, no complex architectural changes
+- **Task-Agnostic Framework**: Feature-level assessment applicable to any encoder backbone
+- **State-of-the-Art Results**: Consistent improvements on semantic and instance segmentation
 
-Integrated into [Huggingface Spaces 🤗](https://huggingface.co/spaces) using [Gradio](https://github.com/gradio-app/gradio). Try out the Web Demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/Mask2Former)
+## 📊 Results
 
-Replicate web demo and docker image is available here: [![Replicate](https://replicate.com/facebookresearch/mask2former/badge)](https://replicate.com/facebookresearch/mask2former)
+### COCO Instance Segmentation
 
-## Advanced usage
+| Method | Backbone | AP | AP<sub>75</sub> | AP<sub>s</sub> |
+|--------|----------|:--:|:--:|:--:|
+| Mask2Former | Swin-B | 44.1 | 47.1 | 22.8 |
+| Mask2Former | DINOv3-B (FT) | 46.0 | 49.3 | 24.2 |
+| Mask2Former | SAM2-B (FZ) | 35.8 | 37.6 | 19.2 |
+| **Ours** | **ViT-B (Hybrid)** | **47.3** | **51.4** | **27.3** |
 
-See [Advanced Usage of Mask2Former](ADVANCED_USAGE.md).
+### Cityscapes Segmentation
 
-## Model Zoo and Baselines
+| Method | Backbone | AP | mIoU |
+|--------|----------|:--:|:--:|
+| Mask2Former | Swin-B | 38.0 | 80.5 |
+| Mask2Former | DINOv3-B (FT) | 35.6 | 81.2 |
+| Mask2Former | SAM2-B (FZ) | 35.8 | 79.7 |
+| **Ours** | **ViT-B (Hybrid)** | **39.5** | **82.8** |
 
-We provide a large set of baseline results and trained models available for download in the [Mask2Former Model Zoo](MODEL_ZOO.md).
+### SC/EF Metric Profiles
 
-## License
+| Backbone | Metric | OS 4 | OS 8 | OS 16 | OS 32 |
+|----------|--------|:----:|:----:|:-----:|:-----:|
+| DINOv3 | SC | **0.73** | 0.71 | 0.65 | 0.53 |
+| DINOv3 | EF | 1.27 | 1.64 | 2.33 | 5.88 |
+| SAM2 | SC | 0.49 | 0.44 | 0.11 | 0.41 |
+| SAM2 | EF | 6.60 | 8.59 | **17.13** | 12.47 |
 
-Shield: [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+> DINOv3 shows high SC (structure-strong), SAM2 shows high EF at OS16 (edge-strong)
 
-The majority of Mask2Former is licensed under a [MIT License](LICENSE).
+## 🛠️ Installation
 
+```bash
+# Clone the repository
+git clone https://github.com/xxx/MetricGuidedVFMFusion.git
+cd MetricGuidedVFMFusion
 
-However portions of the project are available under separate license terms: Swin-Transformer-Semantic-Segmentation is licensed under the [MIT license](https://github.com/SwinTransformer/Swin-Transformer-Semantic-Segmentation/blob/main/LICENSE), Deformable-DETR is licensed under the [Apache-2.0 License](https://github.com/fundamentalvision/Deformable-DETR/blob/main/LICENSE).
+# Create conda environment
+conda create -n vfm_fusion python=3.10 -y
+conda activate vfm_fusion
 
-## <a name="CitingMask2Former"></a>Citing Mask2Former
+# Install dependencies
+pip install -r requirements.txt
 
-If you use Mask2Former in your research or wish to refer to the baseline results published in the [Model Zoo](MODEL_ZOO.md), please use the following BibTeX entry.
+# Install Mask2Former
+cd third_party/Mask2Former
+pip install -e .
+cd ../..
+```
 
-```BibTeX
-@inproceedings{cheng2021mask2former,
-  title={Masked-attention Mask Transformer for Universal Image Segmentation},
-  author={Bowen Cheng and Ishan Misra and Alexander G. Schwing and Alexander Kirillov and Rohit Girdhar},
-  journal={CVPR},
-  year={2022}
+## 📁 Data Preparation
+
+```
+data/
+├── coco/
+│   ├── train2017/
+│   ├── val2017/
+│   └── annotations/
+├── cityscapes/
+│   ├── leftImg8bit/
+│   ├── gtFine/
+│   └── gtCoarse/
+└── ade20k/
+    ├── images/
+    └── annotations/
+```
+
+## 🚀 Quick Start
+
+### Compute SC/EF Metrics
+
+```bash
+# Compute metrics for a VFM encoder
+python tools/compute_metrics.py \
+    --encoder dinov3_base \
+    --dataset cityscapes \
+    --output_dir outputs/metrics/
+```
+
+### Training
+
+```bash
+# Train with metric-guided fusion on COCO
+python train.py \
+    --config configs/coco_instance_seg.yaml \
+    --main_encoder dinov3_base \
+    --aux_encoder sam2_base \
+    --fusion_stage 16 \
+    --output_dir outputs/coco/
+
+# Train on Cityscapes
+python train.py \
+    --config configs/cityscapes_seg.yaml \
+    --main_encoder dinov3_base \
+    --aux_encoder sam2_base \
+    --fusion_stage 16 \
+    --output_dir outputs/cityscapes/
+```
+
+### Evaluation
+
+```bash
+# Evaluate on COCO
+python evaluate.py \
+    --config configs/coco_instance_seg.yaml \
+    --checkpoint outputs/coco/checkpoint_best.pth \
+    --eval_type instance
+
+# Evaluate on Cityscapes
+python evaluate.py \
+    --config configs/cityscapes_seg.yaml \
+    --checkpoint outputs/cityscapes/checkpoint_best.pth \
+    --eval_type panoptic
+```
+
+## 📦 Model Zoo
+
+### Pretrained Checkpoints
+
+| Model | Dataset | Task | AP/mIoU | Download |
+|-------|---------|------|:-------:|:--------:|
+| DINOv3-B + SAM2-B | COCO | Instance Seg | 47.3 | [ckpt]() |
+| DINOv3-B + SAM2-B | Cityscapes | Instance Seg | 39.5 | [ckpt]() |
+| DINOv3-B + SAM2-B | Cityscapes | Semantic Seg | 82.8 | [ckpt]() |
+| DINOv3-B + SAM2-B | ADE20K | Semantic Seg | 56.5 | [ckpt]() |
+
+### VFM Encoders
+
+We use the following pretrained VFM encoders:
+
+| Encoder | Source | Weights |
+|---------|--------|:-------:|
+| DINOv3-B | [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) | [link]() |
+| SAM2-B | [facebookresearch/sam2](https://github.com/facebookresearch/sam2) | [link]() |
+
+## 📐 Method Overview
+
+<p align="center">
+  <img src="assets/framework.png" width="90%">
+</p>
+
+### Structural Coherence (SC)
+
+Measures whether regions with similar structure are coherently aggregated in feature space:
+
+- **SFC** (Structured Feature Contrast): Between-patch vs within-patch variance ratio
+- **SCS** (Structural Clustering Score): Silhouette coefficient from k-means clustering
+
+```
+SC = √(SFC · SCS)
+```
+
+### Edge Fidelity (EF)
+
+Assesses whether feature activations concentrate along image boundaries:
+
+- **EC** (Edge Concentration): Gradient energy within edge band
+- **NC** (Near-edge Concentration): Ring band concentration
+- **FC** (Frequency Content): Medium-to-high frequency energy
+- **SP** (Spatial Precision): Sensitivity to spatial shifts
+
+```
+EF = 100 · EC · NC · FC · SP
+```
+
+### Fusion Strategy
+
+1. Select encoder with highest SC as **main** (DINOv3)
+2. Select encoder with highest EF as **auxiliary** (SAM2)
+3. Replace main features at stage `s* = argmax_s EF_aux(s)` with auxiliary features
+4. Train main encoder, freeze auxiliary encoder
+
+## 📂 Project Structure
+
+```
+MetricGuidedVFMFusion/
+├── configs/                    # Configuration files
+│   ├── coco_instance_seg.yaml
+│   ├── cityscapes_seg.yaml
+│   └── ade20k_seg.yaml
+├── models/
+│   ├── encoders/              # VFM encoder wrappers
+│   │   ├── dinov3.py
+│   │   └── sam2.py
+│   ├── fusion/                # Fusion modules
+│   │   └── metric_guided_fusion.py
+│   └── decoder/               # Mask2Former decoder
+├── metrics/                   # SC/EF metric computation
+│   ├── structural_coherence.py
+│   └── edge_fidelity.py
+├── tools/
+│   ├── compute_metrics.py
+│   ├── visualize_features.py
+│   └── analyze_profiles.py
+├── train.py
+├── evaluate.py
+└── requirements.txt
+```
+
+## 📝 Citation
+
+If you find this work useful, please consider citing:
+
+```bibtex
+@inproceedings{xxx2026metricguided,
+  title={Metric-Guided Feature Fusion of Visual Foundation Models for Segmentation Tasks},
+  author={xxx},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Findings},
+  year={2026}
 }
 ```
 
-If you find the code useful, please also consider the following BibTeX entry.
+## 🔗 Related Projects
 
-```BibTeX
-@inproceedings{cheng2021maskformer,
-  title={Per-Pixel Classification is Not All You Need for Semantic Segmentation},
-  author={Bowen Cheng and Alexander G. Schwing and Alexander Kirillov},
-  journal={NeurIPS},
-  year={2021}
-}
-```
+- [Mask2Former](https://github.com/facebookresearch/Mask2Former) - Universal Image Segmentation
+- [DINOv2](https://github.com/facebookresearch/dinov2) - Self-supervised Vision Transformers
+- [SAM2](https://github.com/facebookresearch/sam2) - Segment Anything in Images and Videos
+- [ViT-Adapter](https://github.com/czczup/ViT-Adapter) - Vision Transformer Adapter for Dense Predictions
 
-## Acknowledgement
+## 📄 License
 
-Code is largely based on MaskFormer (https://github.com/facebookresearch/MaskFormer).
+This project is released under the [Apache 2.0 License](LICENSE).
+
+## 🙏 Acknowledgements
+
+We thank the authors of [Mask2Former](https://github.com/facebookresearch/Mask2Former), [DINOv3](https://github.com/facebookresearch/dinov3), and [SAM2](https://github.com/facebookresearch/sam2) for their excellent work and open-source code.
+
+---
+
+<p align="center">
+  <i>If you have any questions, please open an issue or contact us.</i>
+</p>
