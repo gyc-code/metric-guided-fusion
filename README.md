@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/xxxx.xxxxx"><img src="https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg"></a>
   <a href="https://cvpr.thecvf.com/Conferences/2026"><img src="https://img.shields.io/badge/CVPR%202026-Findings-blue.svg"></a>
   <a href="#"><img src="https://img.shields.io/badge/Project-Page-green.svg"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-yellow.svg"></a>
