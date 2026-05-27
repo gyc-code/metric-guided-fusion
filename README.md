@@ -1,20 +1,21 @@
 # Metric-Guided Feature Fusion of Visual Foundation Models for Segmentation Tasks
 
-<p align="center">
-  <img src="assets/teaser.png" width="90%">
-</p>
 
 <p align="center">
-  <a href="https://cvpr.thecvf.com/Conferences/2026"><img src="https://img.shields.io/badge/CVPR%202026-Findings-blue.svg"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Project-Page-green.svg"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-yellow.svg"></a>
+  <a href="https://cvpr.thecvf.com/Conferences/2026">
+    <img src="https://img.shields.io/badge/CVPR%202026-Findings-blue.svg">
+  </a>
+  <a href="https://arxiv.org/pdf/2605.16864">
+    <img src="https://img.shields.io/badge/arXiv-2605.16864-b31b1b.svg">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-yellow.svg">
+  </a>
 </p>
 
 <p align="center">
   <b>CVPR 2026 Findings Track</b>
 </p>
-
-https://arxiv.org/pdf/2605.16864
 
 ## 📢 News
 
@@ -94,30 +95,24 @@ cd ../..
 
 ```
 data/
-├── coco/
-│   ├── train2017/
-│   ├── val2017/
-│   └── annotations/
+├── ade/
+│   └── ADEChallengeData2016/
+│       ├── annotations/
+│       ├── annotations_detectron2/
+│       ├── images/
+│       ├── objectInfo150.txt
+│       └── sceneCategories.txt
 ├── cityscapes/
-│   ├── leftImg8bit/
 │   ├── gtFine/
-│   └── gtCoarse/
-└── ade20k/
-    ├── images/
-    └── annotations/
+│   └── leftImg8bit/
+└── coco/
+    ├── annotations/
+    ├── train2017/
+    ├── val2017/
 ```
 
 ## 🚀 Quick Start
 
-### Compute SC/EF Metrics
-
-```bash
-# Compute metrics for a VFM encoder
-python tools/compute_metrics.py \
-    --encoder dinov3_base \
-    --dataset cityscapes \
-    --output_dir outputs/metrics/
-```
 
 ### Training
 
