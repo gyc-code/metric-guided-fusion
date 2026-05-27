@@ -14,10 +14,12 @@
   <b>CVPR 2026 Findings Track</b>
 </p>
 
+https://arxiv.org/pdf/2605.16864
+
 ## 📢 News
 
-- **[2026.xx]** Code released! 🎉
-- **[2026.xx]** Paper accepted to CVPR 2026 Findings Track!
+- **[2026.05]** Code released! 🎉
+- **[2026.03]** Paper accepted to CVPR 2026 Findings Track!
 
 ## 📖 Abstract
 
@@ -121,48 +123,14 @@ python tools/compute_metrics.py \
 
 ```bash
 # Train with metric-guided fusion on COCO
-python train.py \
-    --config configs/coco_instance_seg.yaml \
-    --main_encoder dinov3_base \
-    --aux_encoder sam2_base \
-    --fusion_stage 16 \
-    --output_dir outputs/coco/
+
+CUDA_VISIBLE_DEVICES=0 python train_net_custom_vlm_fuse.py --num-gpus 1 --dist-url   tcp://127.0.0.1:50171 --config-file configs/coco/instance-segmentation/vfm/maskformer2_fuse.yaml  MODEL.BACKBONE.NAME "DinoV3Backbone"    MAPPING "D"   OUTPUT_DIR ./output_vlm_link/fuse_dinov3_fire_base_sam2_freeze_base_replace_4_coco
 
 # Train on Cityscapes
-python train.py \
-    --config configs/cityscapes_seg.yaml \
-    --main_encoder dinov3_base \
-    --aux_encoder sam2_base \
-    --fusion_stage 16 \
-    --output_dir outputs/cityscapes/
+
+CUDA_VISIBLE_DEVICES=0 python train_net_custom_vlm_fuse.py --num-gpus 1 --dist-url   tcp://127.0.0.1:50172 --config-file configs/cityscapes/instance-segmentation/vlm_fusion/maskformer2_dinov3_sam_large.yaml MODEL.MASK_FORMER.FROZE_BACKBONE False DATASETS.TRAIN "('synscapes_instance_seg_train_eval_cityscapes',)"  MAPPING "D" OUTPUT_DIR ./output_vlm_link/dinov3_large_fire_sam2_large_freeze_D_synscapes2cs
+
 ```
-
-### Evaluation
-
-```bash
-# Evaluate on COCO
-python evaluate.py \
-    --config configs/coco_instance_seg.yaml \
-    --checkpoint outputs/coco/checkpoint_best.pth \
-    --eval_type instance
-
-# Evaluate on Cityscapes
-python evaluate.py \
-    --config configs/cityscapes_seg.yaml \
-    --checkpoint outputs/cityscapes/checkpoint_best.pth \
-    --eval_type panoptic
-```
-
-## 📦 Model Zoo
-
-### Pretrained Checkpoints
-
-| Model | Dataset | Task | AP/mIoU | Download |
-|-------|---------|------|:-------:|:--------:|
-| DINOv3-B + SAM2-B | COCO | Instance Seg | 47.3 | [ckpt]() |
-| DINOv3-B + SAM2-B | Cityscapes | Instance Seg | 39.5 | [ckpt]() |
-| DINOv3-B + SAM2-B | Cityscapes | Semantic Seg | 82.8 | [ckpt]() |
-| DINOv3-B + SAM2-B | ADE20K | Semantic Seg | 56.5 | [ckpt]() |
 
 ### VFM Encoders
 
@@ -170,8 +138,8 @@ We use the following pretrained VFM encoders:
 
 | Encoder | Source | Weights |
 |---------|--------|:-------:|
-| DINOv3-B | [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) | [link]() |
-| SAM2-B | [facebookresearch/sam2](https://github.com/facebookresearch/sam2) | [link]() |
+| DINOv3-B | [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) 
+| SAM2-B | [facebookresearch/sam2](https://github.com/facebookresearch/sam2) 
 
 ## 📐 Method Overview
 
@@ -210,32 +178,6 @@ EF = 100 · EC · NC · FC · SP
 3. Replace main features at stage `s* = argmax_s EF_aux(s)` with auxiliary features
 4. Train main encoder, freeze auxiliary encoder
 
-## 📂 Project Structure
-
-```
-MetricGuidedVFMFusion/
-├── configs/                    # Configuration files
-│   ├── coco_instance_seg.yaml
-│   ├── cityscapes_seg.yaml
-│   └── ade20k_seg.yaml
-├── models/
-│   ├── encoders/              # VFM encoder wrappers
-│   │   ├── dinov3.py
-│   │   └── sam2.py
-│   ├── fusion/                # Fusion modules
-│   │   └── metric_guided_fusion.py
-│   └── decoder/               # Mask2Former decoder
-├── metrics/                   # SC/EF metric computation
-│   ├── structural_coherence.py
-│   └── edge_fidelity.py
-├── tools/
-│   ├── compute_metrics.py
-│   ├── visualize_features.py
-│   └── analyze_profiles.py
-├── train.py
-├── evaluate.py
-└── requirements.txt
-```
 
 ## 📝 Citation
 
